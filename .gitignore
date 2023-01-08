@@ -1,0 +1,11 @@
+*.o
+*.a
+*.so
+Makefile
+mkwx
+word1e-solve
+*.txt
+!CMakeLists.txt
+!words-index.txt
+*.cmake
+CMakeFiles/
