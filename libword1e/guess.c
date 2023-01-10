@@ -18,6 +18,8 @@
  * USA
  */
 
+#define _GNU_SOURCE
+
 #include "guess.h"
 #include "threadpool.h"
 
@@ -167,58 +169,78 @@ load_words(FILE *f)
 	num_opts = num_words;
 }
 
-Know
-no_knowledge(void)
+int
+hist_count(const Histogram hist, char letter)
 {
-	extern int num_digraphs;
+	uint64_t l = letter - 'A';
+	int idx = l >> 4;
+	uint64_t shift = (l & 0xf) * 4;
+	uint64_t mask = (uint64_t)0xf << shift;
+	return __builtin_popcountll(hist[idx] & mask);
+}
 
-	uint32_t all_bits = 0x7FFFFFF;
-	for (int i = 0; i < num_digraphs; ++i)
-		all_bits = (all_bits << 1) | 1;
+static inline void
+hist_add_letter(Histogram hist, char letter)
+{
+	uint64_t l = letter - 'A';
+	int idx = l >> 4;
+	uint64_t shift = (l & 0xf) * 4;
+	uint64_t mask = (uint64_t)0xf << shift;
+	hist[idx] |= (((hist[idx] & mask) << 1) & mask) | ((uint64_t)1 << shift);
+}
 
-	Know know;
-	memset(&know, 0, sizeof(know));
+static inline void
+get_word_hist(Histogram hist, Word word)
+{
+	memset(hist, 0, sizeof(Histogram));
 	for (int i = 0; i < 5; ++i)
-		know.maybe[i] = all_bits;
-	memset(know.musthave, 0, sizeof(know.musthave));
-	return know;
+		hist_add_letter(hist, word[i]);
 }
 
 bool
-word_matches(Word word, Know know)
+word_matches(Word word, const Know *know)
 {
 	for (int i = 0; i < 5; ++i) {
 		/* word contains ruled-out letter */
-		if (0 == (know.maybe[i] & letter_bit(word[i])))
+		if (0 != (know->exclude[i] & letter_bit(word[i])))
 			return false;
 	}
 
-	Word word_cpy;
-	memcpy(word_cpy, word, sizeof(Word));
+	if (know->hist[0] == 0 && know->hist[0] == 0)
+		return true;
 
-	for (int i = 0; i < 5; ++i) {
-		char ltr = know.musthave[i];
-		if (!ltr)
-			continue;
+	Histogram hist;
+	get_word_hist(hist, word);
 
-		bool contains = false;
-		for (int j = 0; j < 5; ++j) {
-			if (word_cpy[j] == ltr) {
-				contains = true;
-				word_cpy[j] = 0;
-				break;
-			}
-		}
-
-		if (!contains)
+	for (int i = 0; i < sizeof(hist) / sizeof(hist[0]); ++i)
+		if ((hist[i] & know->hist[i]) != know->hist[i])
 			return false;
-	}
 
 	return true;
 }
 
 int
-num_opts_with_knowledge(Know know)
+count_opts_(const Know *know, Word sim_target)
+{
+	extern Word *opts;
+	extern int num_opts;
+
+	int res = 0;
+	for (int i = 0; i < num_opts; ++i) {
+		if (word_matches(opts[i], know)) {
+			++res;
+			print_word(stdout, sim_target);
+			printf(": ");
+			print_word(stdout, opts[i]);
+			printf("\n");
+		}
+	}
+
+	return res;
+}
+
+int
+count_opts(const Know *know)
 {
 	extern Word *opts;
 	extern int num_opts;
@@ -231,8 +253,9 @@ num_opts_with_knowledge(Know know)
 	return res;
 }
 
+
 void
-filter_opts(Know know)
+filter_opts(const Know *know)
 {
 	extern Word *opts;
 	extern int num_opts;
@@ -245,106 +268,78 @@ filter_opts(Know know)
 	num_opts = j;
 }
 
-Know
-gather_knowledge_col(Word guess, Word word, WordColor *out)
+void
+compare_to_target(WordColor out, Word guess, Word target)
 {
-	Know new = no_knowledge();
+	int8_t target_hist[32] = { 0 };
 
-	Word incor = { 0 };
-	Word rem = { 0 };
-
-	for (int i = 0; i < 5; ++i) {
-		if (guess[i] == word[i]) {
-			new.maybe[i] = letter_bit(word[i]);
-			out->colors[i] = GREEN;
-		} else {
-			incor[i] = guess[i];
-			rem[i] = word[i];
-			new.maybe[i] &= ~letter_bit(guess[i]);
-		}
-	}
+	for (int i = 0; i < 5; ++i)
+		if (guess[i] != target[i])
+			++target_hist[target[i] - 'A'];
 
 	for (int i = 0; i < 5; ++i) {
-		char incor_ltr = incor[i];
-		if (!incor_ltr)
-			continue;
+		uint8_t color = DARK_COLOR;
 
-		out->colors[i] = BLACK;
-		bool contains = false;
-		for (int j = 0; j < 5; ++j) {
-			if (word[j] == incor_ltr)
-				contains = true;
-
-			if (rem[j] == incor_ltr) {
-				new.musthave[i] = incor_ltr;
-				rem[j] = 0;
-				out->colors[i] = YELLOW;
-				break;
-			}
+		if (target[i] == guess[i]) {
+			color = GREEN_COLOR;
+		} else if (target_hist[guess[i] - 'A'] > 0) {
+			color = YELLOW_COLOR;
+			--target_hist[guess[i] - 'A'];
 		}
 
-		if (contains)
-			continue;
-
-		for (int j = 0; j < 5; ++j)
-			new.maybe[j] &= ~letter_bit(incor_ltr);
+		out[i] = color;
 	}
-
-	return new;
 }
 
-Know
-gather_knowledge(Word guess, Word word)
+int
+knowledge_from_colors(Know *know, Word guess, WordColor colors)
 {
-	WordColor dummy;
-	return gather_knowledge_col(guess, word, &dummy);
-}
+	memset(know, 0, sizeof(Know));
+	Histogram yellow = { 0 };
 
-static void
-rm_musthave(Know *k, char ltr)
-{
 	for (int i = 0; i < 5; ++i) {
-		if (k->musthave[i] == ltr) {
-			k->musthave[i] = 0;
+		char letter = guess[i];
+		switch (colors[i]) {
+		case GREEN_COLOR:
+			hist_add_letter(know->hist, letter);
+			know->exclude[i] |= ~letter_bit(letter);
+			break;
+
+		case YELLOW_COLOR:
+			hist_add_letter(yellow, letter);
+			hist_add_letter(know->hist, letter);
+			know->exclude[i] |= letter_bit(letter);
+			break;
+
+		case DARK_COLOR:
+			know->exclude[i] |= letter_bit(letter);
 			break;
 		}
 	}
-}
 
-static int
-musthave_count(Know k, char ltr)
-{
-	int res = 0;
-	for (int i = 0; i < 5; ++i)
-		if (k.musthave[i] == ltr)
-			++res;
-	return res;
-}
-
-Know
-combine_knowledge(Know a, Know b)
-{
-	Know res;
 	for (int i = 0; i < 5; ++i) {
-		res.maybe[i] = a.maybe[i] & b.maybe[i];
-		if (__builtin_popcount(a.maybe[i]) > 1 && __builtin_popcount(res.maybe[i]) == 1)
-			rm_musthave(&a, bit_letter(res.maybe[i]));
-		if (__builtin_popcount(b.maybe[i]) > 1 && __builtin_popcount(res.maybe[i]) == 1)
-			rm_musthave(&b, bit_letter(res.maybe[i]));
+		char letter = guess[i];
+		if (colors[i] != DARK_COLOR || hist_count(yellow, letter) > 0)
+			continue;
+
+		for (int j = 0; j < 5; ++j)
+			if (guess[j] != letter)
+				know->exclude[j] |= letter_bit(letter);
 	}
 
-	memset(res.musthave, 0, sizeof(Word));
+	return 0;
+}
 
-	int nmh = 0;
-	for (char ch = 'A'; ch <= 'Z'; ++ch) {
-		int amh = musthave_count(a, ch);
-		int bmh = musthave_count(b, ch);
-		int newmh = (amh > bmh) ? amh : bmh;
-		for (int i = 0; i < newmh; ++i)
-			res.musthave[nmh++] = ch;
-	}
+int
+absorb_knowledge(Know *restrict know, const Know *other)
+{
+	for (int i = 0; i < 5; ++i)
+		know->exclude[i] |= other->exclude[i];
 
-	return res;
+	for (int i = 0; i < sizeof(know->hist) / sizeof(know->hist[0]); ++i)
+		know->hist[i] |= other->hist[i];
+
+	return 0;
 }
 
 void
@@ -388,61 +383,32 @@ print_word(FILE *f, Word word)
 }
 
 void
-print_know(Know k)
+print_know(const Know *k)
 {
-	extern int num_digraphs;
-
-	uint32_t all_bits = 0x7FFFFFF;
-	for (int i = 0; i < num_digraphs; ++i)
-		all_bits = (all_bits << 1) | 1;
-
-	uint32_t black = 0;
-	for (int i = 0; i < 5; ++i)
-		black |= k.maybe[i];
-	black ^= all_bits;
-	int nblack = __builtin_popcount(black);
-
-	printf("I know: /");
-
 	for (int i = 0; i < 5; ++i) {
-		int maybe = k.maybe[i];
-		int pop = __builtin_popcount(maybe);
-		if (pop > 26 + num_digraphs - nblack) {
-			putchar('.');
+		if (__builtin_popcount(k->exclude[i]) == 31) {
+			putchar(bit_letter(~k->exclude[i]));
 			continue;
 		}
 
-		if (pop == 1) {
-			putchar(bit_letter(maybe));
-			continue;
-		}
+		printf("[^");
+		for (char l = 'A'; l <= 'Z'; ++l)
+			if (k->exclude[i] & letter_bit(l))
+				putchar(l);
 
-		bool neg = pop > (26 + num_digraphs - nblack) / 2;
-		putchar('[');
-		if (neg)
-			putchar('~');
-		for (char ch = 'A'; ch <= 'Z' + num_digraphs; ++ch) {
-			int ltr_bit = letter_bit(ch);
-			if ((ltr_bit & black) == 0 && (!neg == ((maybe & ltr_bit) == ltr_bit)))
-				print_wordch(stdout, ch, 0);
-		}
 		putchar(']');
 	}
-	printf("/; must contain /");
-	for (int i = 0; i < 5; ++i)
-		if (k.musthave[i])
-			print_wordch(stdout, k.musthave[i], 0);
 
-	printf("/, not /");
-	for (char ch = 'A'; ch <= 'Z' + num_digraphs; ++ch)
-		if (black & letter_bit(ch))
-			print_wordch(stdout, ch, 0);
-
-	puts("/");
+	for (char l = 'A'; l <= 'Z'; ++l) {
+		int count = hist_count(k->hist, l);
+		if (count > 0)
+			printf(" %c: %d", l, count);
+	}
+	putchar('\n');
 }
 
 double
-score_guess(Word guess, Know know, double break_at)
+score_guess(Word guess, const Know *know, double break_at)
 {
 	extern Word *opts;
 	extern int num_opts;
@@ -454,9 +420,33 @@ score_guess(Word guess, Know know, double break_at)
 		if (memcmp(guess, opts[j], 5) == 0)
 			continue;
 
-		Know new = gather_knowledge(guess, opts[j]);
-		Know sim_know = combine_knowledge(know, new);
-		int sim_opts = num_opts_with_knowledge(sim_know);
+		WordColor wc;
+		compare_to_target(wc, guess, opts[j]);
+
+		/*for (int k = 0; k < 5; ++k) {
+			switch (wc[k]) {
+			case GREEN_COLOR:
+				putchar('G');
+				break;
+			case YELLOW_COLOR:
+				putchar('Y');
+				break;
+			case DARK_COLOR:
+				putchar('B');
+				break;
+			}
+		}
+		putchar('\n');*/
+
+		Know new;
+		knowledge_from_colors(&new, guess, wc);
+
+		//print_know(&new);
+
+		Know sim_know = *know;
+		absorb_knowledge(&sim_know, &new);
+		//int sim_opts = count_opts(&sim_know, opts[j]);
+		int sim_opts = count_opts(&sim_know);
 		guess_score -= sim_opts * norm;
 
 		if (guess_score < break_at)
@@ -497,7 +487,7 @@ best_guess_worker(void *info)
 		Word guess;
 		memcpy(guess, pool[i], sizeof(Word));
 
-		double guess_score = score_guess(guess, task->know, best_local_score);
+		double guess_score = score_guess(guess, &task->know, best_local_score);
 
 		pthread_mutex_lock(&out->lock);
 		if (guess_score > out->best_score) {
@@ -533,14 +523,14 @@ cpu_count(void)
 }
 
 double
-best_guesses(Word *top, int max_out, int *num_out, Know know)
+best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 {
 	extern Word *all_words;
 	extern int num_opts, num_words, verbosity;
 	extern double *initial_scores;
 
 	Know nothing = no_knowledge();
-	if (initial_scores != NULL && memcmp(&nothing, &know, sizeof(know)) == 0) {
+	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
 		memcpy(top[0], all_words[0], sizeof(Word));
 		*num_out = 1;
 		return initial_scores[0];
@@ -568,7 +558,7 @@ best_guesses(Word *top, int max_out, int *num_out, Know know)
 	for (int i = 0; i < num_workers; ++i) {
 		tasks[i].from = i * num_words / num_workers;
 		tasks[i].until = (i + 1) * num_words / num_workers;
-		tasks[i].know = know;
+		tasks[i].know = *know;
 		tasks[i].out = &out;
 	}
 
