@@ -53,5 +53,6 @@ int absorb_knowledge(Know *know, const Know *other);
 void print_know(const Know *k);
 void print_wordch(FILE *f, char ch, char nxt);
 void print_word(FILE *f, const Word *word);
-double score_guess(const Word *guess, const Know *know, double break_at);
+double score_guess(const Word *guess, const Know *know);
+double score_guess_st(const Word *guess, const Know *know, double break_at);
 double best_guesses(Word *top, int max_out, int *num_out, const Know *know);

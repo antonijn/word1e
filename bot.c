@@ -27,7 +27,6 @@
 #include <unistd.h>
 #include "guess.h"
 #include "json.h"
-#include "libword1e/guess.h"
 
 #define MAX_GIVEN_GUESSES 16
 Word *all_words, *opts, given_guesses[MAX_GIVEN_GUESSES];
@@ -84,8 +83,8 @@ static JSONWriter *json, json_value;
 static void
 jsonify_word(const Word *word)
 {
-	char word_string[sizeof(Word) + 1] = { 0 };
-	memcpy(word_string, &word->letters[0], sizeof(Word));
+	char word_string[6] = { 0 };
+	memcpy(word_string, word->letters, 5);
 
 	json_string(json, word_string);
 }
@@ -116,8 +115,8 @@ jsonify_reports(WordColor colors, GuessReport guess, GuessReport *best, int num_
 	json_leave_assoc(json);
 
 	json_enter_assoc(json, "colors");
-	char str[sizeof(Word) + 1] = { 0 };
-	for (int i = 0; i < sizeof(Word); ++i) {
+	char str[6] = { 0 };
+	for (int i = 0; i < 5; ++i) {
 		switch (colors[i]) {
 		case DARK_COLOR:   str[i] = 'B'; break;
 		case GREEN_COLOR:  str[i] = 'G'; break;
@@ -288,7 +287,7 @@ user_guesser(const Know *k, GuessReport *guess, GuessReport **best, int *num_bes
 	best_reports(k, best, num_best);
 
 	memcpy(&guess->guess, &word, sizeof(Word));
-	guess->score = score_guess(&word, k, 0.0);
+	guess->score = score_guess(&word, k);
 	return true;
 
 	/*
@@ -323,7 +322,7 @@ given_guesser(const Know *know, GuessReport *guess, GuessReport **best, int *num
 		return false;
 
 	memcpy(&guess->guess, &given_guesses[word_idx], sizeof(Word));
-	guess->score = score_guess(&guess->guess, know, 0.0);
+	guess->score = score_guess(&guess->guess, know);
 
 	if (word_idx == num_given_guesses - 1) {
 		*skippable = false;
@@ -548,22 +547,22 @@ load_given_guesses(const char *arg)
 	if (len == 0)
 		return 0;
 
-	int nwords = (len + 1) / (sizeof(Word) + 1);
+	int nwords = (len + 1) / 6;
 
 	if (nwords > MAX_GIVEN_GUESSES) {
 		fprintf(stderr, "too many initiial words\n");
 		return -1;
 	}
 
-	if (((len + 1) % (sizeof(Word) + 1)) != 0) {
+	if (((len + 1) % 6) != 0) {
 		fprintf(stderr, "invalid initial word specifier\n");
 		return -1;
 	}
 
 	
 	for (int i = 0; i < nwords; ++i) {
-		int j = i * (sizeof(Word) + 1);
-		FILE *f = fmemopen((void *)(arg + j), sizeof(Word), "r");
+		int j = i * 6;
+		FILE *f = fmemopen((void *)(arg + j), 5, "r");
 		if (scan_word(f, &given_guesses[i]) < 0) {
 			fprintf(stderr, "invalid initial word given\n");
 			return -1;

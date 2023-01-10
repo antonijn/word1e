@@ -62,7 +62,7 @@ build_index(void *info)
 	for (int i = from; i < until; ++i) {
 		InitialGuess *ig = output + i;
 		ig->guess = &all_words[i];
-		ig->score = score_guess(&all_words[i], &k, 0.0);
+		ig->score = score_guess_st(&all_words[i], &k, 0.0);
 		if (verbosity > 0) {
 			int iscore = ig->score * 1000000.0;
 			print_word(stderr, ig->guess);
