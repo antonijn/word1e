@@ -536,8 +536,8 @@ best_guess_worker(void *info)
 
 	double best_local_score = 0.0;
 
-	for (int i = task->offset; i < num_opts; i += stride) {
-		double guess_score = score_guess_st(&opts[i], &task->know, best_local_score);
+	for (int i = task->offset; i < num_words; i += stride) {
+		double guess_score = score_guess_st(&all_words[i], &task->know, best_local_score);
 
 		pthread_mutex_lock(&out->lock);
 		if (guess_score > out->best_score) {
@@ -581,13 +581,11 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 
 	BestTask tasks[MAX_WORKERS];
 
-	int num_workers = 1 + num_opts / 50;
 	int max_workers = cpu_count();
 	if (max_workers > MAX_WORKERS)
 		max_workers = MAX_WORKERS;
 
-	if (num_workers > max_workers)
-		num_workers = max_workers;
+	int num_workers = max_workers;
 
 	for (int i = 0; i < num_workers; ++i) {
 		tasks[i].offset = i;
