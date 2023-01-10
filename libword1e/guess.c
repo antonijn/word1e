@@ -474,7 +474,7 @@ typedef struct {
 } TaskOutput;
 
 typedef struct {
-	int from, until;
+	int offset, stride;
 	TaskOutput *out;
 	Know know;
 } Task;
@@ -488,14 +488,13 @@ best_guess_worker(void *info)
 	Task *task = info;
 	TaskOutput *out = task->out;
 	
-	Word *pool = all_words + task->from;
-	int pool_limit = task->until - task->from;
+	const int stride = task->stride;
 
 	double best_local_score = 0.0;
 
-	for (int i = 0; i < pool_limit; ++i) {
+	for (int i = task->offset; i < num_opts; i += stride) {
 		Word guess;
-		memcpy(guess, pool[i], sizeof(Word));
+		memcpy(guess, &opts[i], sizeof(Word));
 
 		double guess_score = score_guess(guess, task->know, best_local_score);
 
@@ -566,8 +565,8 @@ best_guesses(Word *top, int max_out, int *num_out, Know know)
 		num_workers = max_workers;
 
 	for (int i = 0; i < num_workers; ++i) {
-		tasks[i].from = i * num_words / num_workers;
-		tasks[i].until = (i + 1) * num_words / num_workers;
+		tasks[i].offset = i;
+		tasks[i].stride = num_workers;
 		tasks[i].know = know;
 		tasks[i].out = &out;
 	}
