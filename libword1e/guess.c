@@ -453,7 +453,7 @@ typedef struct {
 } TaskOutput;
 
 typedef struct {
-	int from, until;
+	int offset, stride;
 	TaskOutput *out;
 	Know know;
 } Task;
@@ -467,23 +467,22 @@ best_guess_worker(void *info)
 	Task *task = info;
 	TaskOutput *out = task->out;
 	
-	Word *pool = all_words + task->from;
-	int pool_limit = task->until - task->from;
+	const int stride = task->stride;
 
 	double best_local_score = 0.0;
 
-	for (int i = 0; i < pool_limit; ++i) {
-		double guess_score = score_guess(&pool[i], &task->know, best_local_score);
+	for (int i = task->offset; i < num_opts; i += stride) {
+		double guess_score = score_guess(&opts[i], &task->know, best_local_score);
 
 		pthread_mutex_lock(&out->lock);
 		if (guess_score > out->best_score) {
-			memcpy(&out->top[0], &pool[i], sizeof(Word));
+			memcpy(&out->top[0], &opts[i], sizeof(Word));
 			out->best_score = guess_score;
 			out->num_out = 1;
 		} else if (guess_score == out->best_score) {
 			int j = out->num_out;
 			if (j < out->max_out)
-				memcpy(&out->top[j], &pool[i], sizeof(Word));
+				memcpy(&out->top[j], &opts[i], sizeof(Word));
 			++out->num_out;
 		}
 
@@ -542,8 +541,8 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 		num_workers = max_workers;
 
 	for (int i = 0; i < num_workers; ++i) {
-		tasks[i].from = i * num_words / num_workers;
-		tasks[i].until = (i + 1) * num_words / num_workers;
+		tasks[i].offset = i;
+		tasks[i].stride = num_workers;
 		tasks[i].know = *know;
 		tasks[i].out = &out;
 	}
