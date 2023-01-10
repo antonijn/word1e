@@ -209,26 +209,6 @@ word_matches(const Word *word, const Know *know)
 }
 
 int
-count_opts_(const Know *know, const Word *sim_target)
-{
-	extern Word *opts;
-	extern int num_opts;
-
-	int res = 0;
-	for (int i = 0; i < num_opts; ++i) {
-		if (word_matches(&opts[i], know)) {
-			++res;
-			print_word(stdout, sim_target);
-			printf(": ");
-			print_word(stdout, &opts[i]);
-			printf("\n");
-		}
-	}
-
-	return res;
-}
-
-int
 count_opts(const Know *know)
 {
 	extern Word *opts;
@@ -454,7 +434,17 @@ score_guess_worker(void *info)
 double
 score_guess(const Word *guess, const Know *know)
 {
-	extern int num_opts;
+	extern Word *all_words;
+	extern int num_opts, num_words;
+	extern double *initial_scores;
+
+	Know nothing = no_knowledge();
+	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
+		for (int i = 0; i < num_words; ++i) {
+			if (memcmp(all_words[i].letters, guess->letters, 5) == 0)
+				return initial_scores[i];
+		}
+	}
 
 	ScoreTask tasks[MAX_WORKERS];
 
