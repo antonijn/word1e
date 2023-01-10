@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include "guess.h"
 #include "json.h"
+#include "libword1e/guess.h"
 
 #define MAX_GIVEN_GUESSES 16
 Word *all_words, *opts, given_guesses[MAX_GIVEN_GUESSES];
@@ -63,14 +64,14 @@ typedef struct {
 	double score;
 } GuessReport;
 
-typedef Know (*Oracle)(Word guess, WordColor *wc_out);
-typedef bool (*Guesser)(Know k, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable);
+typedef Know (*Oracle)(const Word *guess, WordColor colors);
+typedef bool (*Guesser)(const Know *k, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable);
 
 static void
 load_target(char *target_str)
 {
 	FILE *f = fmemopen((void *)target_str, strlen(target_str), "r");
-	if (scan_word(f, target) < 0) {
+	if (scan_word(f, &target) < 0) {
 		fprintf(stderr, "invalid word given\n");
 		exit(1);
 	}
@@ -81,10 +82,10 @@ static char *cmd;
 static JSONWriter *json, json_value;
 
 static void
-jsonify_word(Word word)
+jsonify_word(const Word *word)
 {
 	char word_string[sizeof(Word) + 1] = { 0 };
-	memcpy(word_string, &word[0], sizeof(Word));
+	memcpy(word_string, &word->letters[0], sizeof(Word));
 
 	json_string(json, word_string);
 }
@@ -95,7 +96,7 @@ jsonify_guess(GuessReport guess)
 	json_enter_dict(json);
 
 	json_enter_assoc(json, "word");
-	jsonify_word(guess.guess);
+	jsonify_word(&guess.guess);
 	json_leave_assoc(json);
 
 	json_enter_assoc(json, "score");
@@ -106,7 +107,7 @@ jsonify_guess(GuessReport guess)
 }
 
 static void
-jsonify_reports(WordColor wc, GuessReport guess, GuessReport *best, int num_best, int eliminated)
+jsonify_reports(WordColor colors, GuessReport guess, GuessReport *best, int num_best, int eliminated)
 {
 	json_enter_dict(json);
 
@@ -117,10 +118,10 @@ jsonify_reports(WordColor wc, GuessReport guess, GuessReport *best, int num_best
 	json_enter_assoc(json, "colors");
 	char str[sizeof(Word) + 1] = { 0 };
 	for (int i = 0; i < sizeof(Word); ++i) {
-		switch (wc.colors[i]) {
-		case BLACK:  str[i] = 'B'; break;
-		case GREEN:  str[i] = 'G'; break;
-		case YELLOW: str[i] = 'Y'; break;
+		switch (colors[i]) {
+		case DARK_COLOR:   str[i] = 'B'; break;
+		case GREEN_COLOR:  str[i] = 'G'; break;
+		case YELLOW_COLOR: str[i] = 'Y'; break;
 		}
 	}
 	json_string(json, str);
@@ -141,7 +142,7 @@ jsonify_reports(WordColor wc, GuessReport guess, GuessReport *best, int num_best
 	json_enter_list(json);
 
 	for (int i = 0; i < num_opts; ++i)
-		jsonify_word(opts[i]);
+		jsonify_word(&opts[i]);
 
 	json_leave_list(json);
 	json_leave_assoc(json);
@@ -159,7 +160,7 @@ print_opt(int i, int cols, int count, Word word)
 	if ((i % cols) == 0)
 		putchar(' ');
 	putchar(' ');
-	print_word(stdout, word);
+	print_word(stdout, &word);
 	if ((i % cols) == (cols - 1) || i == count - 1)
 		putchar('\n');
 }
@@ -182,7 +183,7 @@ print_guesses(Word *top, int max, int n, double score)
 {
 	int m = (n < max) ? n : max;
 	for (int i = 0; i < m; ++i) {
-		print_word(stdout, top[i]);
+		print_word(stdout, &top[i]);
 		if (i == m - 1) {
 			if (n > m)
 				printf("... +%d", n - m);
@@ -195,6 +196,7 @@ print_guesses(Word *top, int max, int n, double score)
 	printf(" (score %.1f%%, exp %.2f)\n", score * 100.0, exp_opts);
 }
 
+/*
 static void
 random_sample(void)
 {
@@ -206,17 +208,20 @@ random_sample(void)
 		memcpy(opts[j], temp, sizeof(Word));
 	}
 }
+*/
 
 static void
-best_reports(Know know, GuessReport **best, int *num_best)
+best_reports(const Know *know, GuessReport **best, int *num_best)
 {
 	const int max_top_guesses = 16;
 	Word *top_words = malloc(sizeof(Word) * max_top_guesses);
 
 	int num_all_opts = num_opts;
 
+	/*
 	if (max_score_samples < num_opts)
 		random_sample();
+	*/
 
 	int n;
 	double best_score = best_guesses(top_words, max_top_guesses, &n, know);
@@ -229,7 +234,7 @@ best_reports(Know know, GuessReport **best, int *num_best)
 	*num_best = m;
 
 	for (int i = 0; i < m; ++i) {
-		memcpy(reports[i].guess, top_words[i], sizeof(Word));
+		memcpy(&reports[i].guess, &top_words[i], sizeof(Word));
 		reports[i].score = best_score;
 	}
 
@@ -237,29 +242,31 @@ best_reports(Know know, GuessReport **best, int *num_best)
 }
 
 static bool
-bot_guesser(Know know, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable)
+bot_guesser(const Know *know, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable)
 {
 	best_reports(know, best, num_best);
 
 	if (num_opts == num_words && initial_options > 1) {
 		int mod = (initial_options > num_words) ? num_words : initial_options;
 		int idx = rand() % mod;
-		memcpy(guess->guess, all_words[idx], sizeof(Word));
+		memcpy(&guess->guess, &all_words[idx], sizeof(Word));
 		guess->score = initial_scores[idx];
 	} else {
 		*guess = (*best)[0];
 	}
 
-	/*if (json == NULL && verbosity > -1) {
+	/*
+	if (json == NULL && verbosity > -1) {
 		printf("%s", "bot guess ");
 		print_guesses(top5, MAX_GUESS, n, score);
-	}*/
+	}
+	*/
 
 	return true;
 }
 
 static bool
-user_guesser(Know k, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable)
+user_guesser(const Know *k, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable)
 {
 	Word word;
 	bool should_prompt = isatty(STDOUT_FILENO) && isatty(STDIN_FILENO);
@@ -267,7 +274,7 @@ user_guesser(Know k, GuessReport *guess, GuessReport **best, int *num_best, bool
 		if (should_prompt)
 			printf("> ");
 
-		if (scan_word(stdin, word) == 0) {
+		if (scan_word(stdin, &word) == 0) {
 			// flush newline
 			int ch;
 			while ((ch = getchar()) != '\n')
@@ -280,11 +287,12 @@ user_guesser(Know k, GuessReport *guess, GuessReport **best, int *num_best, bool
 
 	best_reports(k, best, num_best);
 
-	memcpy(guess->guess, word, sizeof(Word));
-	guess->score = score_guess(word, k, 0.0);
+	memcpy(&guess->guess, &word, sizeof(Word));
+	guess->score = score_guess(&word, k, 0.0);
 	return true;
 
-	/*if (json == NULL) {
+	/*
+	if (json == NULL) {
 		printf("got score %.1f%% (%+.1f%%), exp %.2f\n",
 		       guess_score * 100.0,
 		       (guess_score - best_score) * 100.0,
@@ -302,19 +310,20 @@ user_guesser(Know k, GuessReport *guess, GuessReport **best, int *num_best, bool
 	}
 
 	*score = guess_score;
-	return true;*/
+	return true;
+	*/
 }
 
 static bool
-given_guesser(Know know, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable)
+given_guesser(const Know *know, GuessReport *guess, GuessReport **best, int *num_best, bool *skippable)
 {
 	static int word_idx = 0;
 	
 	if (word_idx >= num_given_guesses)
 		return false;
 
-	memcpy(guess->guess, given_guesses[word_idx], sizeof(Word));
-	guess->score = score_guess(guess->guess, know, 0.0);
+	memcpy(&guess->guess, &given_guesses[word_idx], sizeof(Word));
+	guess->score = score_guess(&guess->guess, know, 0.0);
 
 	if (word_idx == num_given_guesses - 1) {
 		*skippable = false;
@@ -328,7 +337,7 @@ given_guesser(Know know, GuessReport *guess, GuessReport **best, int *num_best, 
 }
 
 static void
-print_playing(Word guess, WordColor wc)
+print_playing(const Word *guess, WordColor colors)
 {
 	if (secret)
 		return;
@@ -336,20 +345,20 @@ print_playing(Word guess, WordColor wc)
 	printf("Playing ");
 	for (int i = 0; i < 5; ++i) {
 		if (color == YES_COLOR) {
-			switch (wc.colors[i]) {
-			case GREEN:
+			switch (colors[i]) {
+			case GREEN_COLOR:
 				printf("\e[1;30m\e[42m");
 				break;
-			case YELLOW:
+			case YELLOW_COLOR:
 				printf("\e[1;30m\e[43m");
 				break;
-			case BLACK:
+			case DARK_COLOR:
 				printf("\e[1m");
 				break;
 			}
 		}
 
-		print_wordch(stdout, guess[i], (i < 4) ? guess[i + 1] : 0);
+		print_wordch(stdout, guess->letters[i], (i < 4) ? guess->letters[i + 1] : 0);
 
 		if (color == YES_COLOR)
 			printf("\e[0m");
@@ -357,7 +366,7 @@ print_playing(Word guess, WordColor wc)
 }
 
 static void
-print_emojis(WordColor wc)
+print_emojis(WordColor colors)
 {
 	if (json != NULL)
 		return;
@@ -367,14 +376,14 @@ print_emojis(WordColor wc)
 			putchar(' ');
 
 		for (int i = 0; i < 5; ++i) {
-			switch (wc.colors[i]) {
-			case GREEN:
+			switch (colors[i]) {
+			case GREEN_COLOR:
 				printf("\U0001F7E9");
 				break;
-			case YELLOW:
+			case YELLOW_COLOR:
 				printf("\U0001F7E8");
 				break;
-			case BLACK:
+			case DARK_COLOR:
 				printf("\U00002B1B");
 				break;
 			}
@@ -383,13 +392,16 @@ print_emojis(WordColor wc)
 }
 
 static Know
-fixed_target_oracle(Word guess, WordColor *wc_out)
+fixed_target_oracle(const Word *guess, WordColor wc_out)
 {
-	Know new = gather_knowledge_col(guess, target, wc_out);
+	compare_to_target(wc_out, guess, &target);
+
+	Know new;
+	knowledge_from_colors(&new, guess, wc_out);
 
 	if (json == NULL) {
-		print_playing(guess, *wc_out);
-		print_emojis(*wc_out);
+		print_playing(guess, wc_out);
+		print_emojis(wc_out);
 		putchar('\n');
 	}
 
@@ -407,7 +419,7 @@ feedback_valid(char *fbstr)
 }
 
 static int
-color_prompt(WordColor *out)
+color_prompt(WordColor colors)
 {
 	char fbbuf[6];
 	Know new = no_knowledge();
@@ -421,13 +433,13 @@ color_prompt(WordColor *out)
 	for (int i = 0; i < 5; ++i) {
 		switch (fbbuf[i]) {
 		case '.':
-			out->colors[i] = BLACK;
+			colors[i] = DARK_COLOR;
 			break;
 		case '-':
-			out->colors[i] = YELLOW;
+			colors[i] = YELLOW_COLOR;
 			break;
 		case '+':
-			out->colors[i] = GREEN;
+			colors[i] = GREEN_COLOR;
 			break;
 		}
 	}
@@ -436,41 +448,19 @@ color_prompt(WordColor *out)
 }
 
 static Know
-guess_color_to_know(Word guess, WordColor wc)
-{
-	Know new = no_knowledge();
-	for (int i = 0; i < 5; ++i) {
-		switch (wc.colors[i]) {
-		case GREEN:
-			new.maybe[i] = letter_bit(guess[i]);
-			break;
-		case YELLOW:
-			new.musthave[i] = guess[i];
-			new.maybe[i] &= ~letter_bit(guess[i]);
-			break;
-		case BLACK:
-			for (int j = 0; j < 5; ++j)
-				new.maybe[j] &= ~letter_bit(guess[i]);
-			break;
-		}
-	}
-
-	return new;
-}
-
-static Know
-puzzle_target_oracle(Word guess, WordColor *wc_out)
+puzzle_target_oracle(const Word *guess, WordColor wc_out)
 {
 	printf("Play ");
 	print_word(stdout, guess);
 	puts(".");
 
 	WordColor wc;
-	if (color_prompt(&wc) < 0)
+	if (color_prompt(wc) < 0)
 		exit(1);
-	*wc_out = wc;
 
-	return guess_color_to_know(guess, wc);
+	Know know;
+	knowledge_from_colors(&know, guess, wc_out);
+	return know;
 }
 
 static void
@@ -497,7 +487,7 @@ run(Guesser guesser, Oracle oracle, Know k)
 
 		memset(&guess, 0, sizeof(guess));
 
-		bool cont = guesser(k, &guess, &best, &num_best, &skippable);
+		bool cont = guesser(&k, &guess, &best, &num_best, &skippable);
 
 		if (!cont) {
 			free(best);
@@ -507,11 +497,11 @@ run(Guesser guesser, Oracle oracle, Know k)
 		++guess_count;
 
 		WordColor wc = { 0 };
-		Know new = oracle(guess.guess, &wc);
-		k = combine_knowledge(k, new);
+		Know new = oracle(&guess.guess, wc);
+		absorb_knowledge(&k, &new);
 
 		int prev_num_opts = num_opts;
-		filter_opts(k);
+		filter_opts(&k);
 
 		int eliminated = prev_num_opts - num_opts;
 
@@ -522,7 +512,7 @@ run(Guesser guesser, Oracle oracle, Know k)
 
 		free(best);
 
-		if (memcmp(target, guess.guess, 5) == 0)
+		if (memcmp(&target, &guess.guess, 5) == 0)
 			break;
 	}
 
@@ -530,11 +520,11 @@ run(Guesser guesser, Oracle oracle, Know k)
 		putchar('\n');
 		if (num_opts) {
 			printf("Got ");
-			print_word(stdout, target);
+			print_word(stdout, &target);
 			printf(" in %d guesses.\n", guess_count);
 		} else {
 			printf("Didn't get ");
-			print_word(stdout, target);
+			print_word(stdout, &target);
 			printf(" in %d guesses.\n", guess_count);
 		}
 	} else {
@@ -546,7 +536,7 @@ static void
 print_word_list()
 {
 	for (int i = 0; i < num_words; ++i) {
-		print_word(stdout, all_words[i]);
+		print_word(stdout, &all_words[i]);
 		putchar('\n');
 	}
 }
@@ -574,7 +564,7 @@ load_given_guesses(const char *arg)
 	for (int i = 0; i < nwords; ++i) {
 		int j = i * (sizeof(Word) + 1);
 		FILE *f = fmemopen((void *)(arg + j), sizeof(Word), "r");
-		if (scan_word(f, given_guesses[i]) < 0) {
+		if (scan_word(f, &given_guesses[i]) < 0) {
 			fprintf(stderr, "invalid initial word given\n");
 			return -1;
 		}
@@ -639,7 +629,7 @@ handle_option(char opt, int *arg_idx, int argc, char **argv)
 		--difficulty;
 		break;
 	case 'c':
-		set_mode(&guess_mode, USER_GUESS);
+		set_mode((int *)&guess_mode, USER_GUESS);
 		break;
 	case 'q':
 		--verbosity;
@@ -648,10 +638,10 @@ handle_option(char opt, int *arg_idx, int argc, char **argv)
 		secret = true;
 		break;
 	case 'r':
-		set_mode(&target_mode, RANDOM_TARGET);
+		set_mode((int *)&target_mode, RANDOM_TARGET);
 		break;
 	case 'l':
-		set_mode(&target_mode, PRINT_WORD_LIST);
+		set_mode((int *)&target_mode, PRINT_WORD_LIST);
 		break;
 	case 'v':
 		++verbosity;
@@ -681,7 +671,7 @@ handle_option(char opt, int *arg_idx, int argc, char **argv)
 		if (load_given_guesses(argv[++*arg_idx]) < 0)
 			return -1;
 
-		set_mode(&guess_mode, GIVEN_GUESS);
+		set_mode((int *)&guess_mode, GIVEN_GUESS);
 		break;
 	default:
 		fprintf(stderr, "unknown option '%c'\n", opt);
@@ -694,8 +684,8 @@ static int
 handle_arg(const char *arg, int *arg_idx, int argc, char **argv)
 {
 	if (arg[0] != '-') {
-		set_mode(&target_mode, FIXED_TARGET);
-		load_target(arg);
+		set_mode((int *)&target_mode, FIXED_TARGET);
+		load_target((char *)arg);
 		return 0;
 	}
 
@@ -749,7 +739,7 @@ main(int argc, char **argv)
 
 	if (target_mode == RANDOM_TARGET) {
 		int idx = random() % num_words;
-		memcpy(target, all_words[idx], sizeof(Word));
+		memcpy(&target, &all_words[idx], sizeof(Word));
 		target_mode = FIXED_TARGET;
 	}
 

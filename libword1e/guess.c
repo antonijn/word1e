@@ -33,6 +33,26 @@
 
 #define MAX_WORKERS 64
 
+int
+hist_count(const Histogram hist, char letter)
+{
+	uint64_t l = letter - 'A';
+	int idx = l >> 4;
+	uint64_t shift = (l & 0xf) * 4;
+	uint64_t mask = (uint64_t)0xf << shift;
+	return __builtin_popcountll(hist[idx] & mask);
+}
+
+static inline void
+hist_add_letter(Histogram hist, char letter)
+{
+	uint64_t l = letter - 'A';
+	int idx = l >> 4;
+	uint64_t shift = (l & 0xf) * 4;
+	uint64_t mask = (uint64_t)0xf << shift;
+	hist[idx] |= (((hist[idx] & mask) << 1) & mask) | ((uint64_t)1 << shift);
+}
+
 static int
 scan_letter(FILE *f)
 {
@@ -66,14 +86,17 @@ scan_letter(FILE *f)
 }
 
 int
-scan_word(FILE *f, Word out)
+scan_word(FILE *f, Word *out)
 {
+	memset(out, 0, sizeof(Word));
 	for (int i = 0; i < 5; ++i) {
 		int ch = scan_letter(f);
 		if (ch < 0)
 			return -1;
-		out[i] = ch;
+		out->letters[i] = ch;
+		hist_add_letter(out->hist, ch);
 	}
+
 	return 0;
 }
 
@@ -138,7 +161,7 @@ load_words(FILE *f)
 
 	double last_score = 1.0;
 	for (int i = 0; i < num_words; ++i) {
-		if (scan_word(f, all_words[i]) < 0) {
+		if (scan_word(f, &all_words[i]) < 0) {
 			fprintf(stderr, "error: line %d\n", line);
 			exit(1);
 		}
@@ -169,69 +192,35 @@ load_words(FILE *f)
 	num_opts = num_words;
 }
 
-int
-hist_count(const Histogram hist, char letter)
-{
-	uint64_t l = letter - 'A';
-	int idx = l >> 4;
-	uint64_t shift = (l & 0xf) * 4;
-	uint64_t mask = (uint64_t)0xf << shift;
-	return __builtin_popcountll(hist[idx] & mask);
-}
-
-static inline void
-hist_add_letter(Histogram hist, char letter)
-{
-	uint64_t l = letter - 'A';
-	int idx = l >> 4;
-	uint64_t shift = (l & 0xf) * 4;
-	uint64_t mask = (uint64_t)0xf << shift;
-	hist[idx] |= (((hist[idx] & mask) << 1) & mask) | ((uint64_t)1 << shift);
-}
-
-static inline void
-get_word_hist(Histogram hist, Word word)
-{
-	memset(hist, 0, sizeof(Histogram));
-	for (int i = 0; i < 5; ++i)
-		hist_add_letter(hist, word[i]);
-}
-
 bool
-word_matches(Word word, const Know *know)
+word_matches(const Word *word, const Know *know)
 {
 	for (int i = 0; i < 5; ++i) {
 		/* word contains ruled-out letter */
-		if (0 != (know->exclude[i] & letter_bit(word[i])))
+		if (0 != (know->exclude[i] & letter_bit(word->letters[i])))
 			return false;
 	}
 
-	if (know->hist[0] == 0 && know->hist[0] == 0)
-		return true;
-
-	Histogram hist;
-	get_word_hist(hist, word);
-
-	for (int i = 0; i < sizeof(hist) / sizeof(hist[0]); ++i)
-		if ((hist[i] & know->hist[i]) != know->hist[i])
+	for (int i = 0; i < sizeof(word->hist) / sizeof(word->hist[0]); ++i)
+		if ((word->hist[i] & know->hist[i]) != know->hist[i])
 			return false;
 
 	return true;
 }
 
 int
-count_opts_(const Know *know, Word sim_target)
+count_opts_(const Know *know, const Word *sim_target)
 {
 	extern Word *opts;
 	extern int num_opts;
 
 	int res = 0;
 	for (int i = 0; i < num_opts; ++i) {
-		if (word_matches(opts[i], know)) {
+		if (word_matches(&opts[i], know)) {
 			++res;
 			print_word(stdout, sim_target);
 			printf(": ");
-			print_word(stdout, opts[i]);
+			print_word(stdout, &opts[i]);
 			printf("\n");
 		}
 	}
@@ -247,7 +236,7 @@ count_opts(const Know *know)
 
 	int res = 0;
 	for (int i = 0; i < num_opts; ++i)
-		if (word_matches(opts[i], know))
+		if (word_matches(&opts[i], know))
 			++res;
 
 	return res;
@@ -262,29 +251,29 @@ filter_opts(const Know *know)
 
 	int j = 0;
 	for (int i = 0; i < num_opts; ++i)
-		if (word_matches(opts[i], know))
-			memmove(opts[j++], opts[i], 5);
+		if (word_matches(&opts[i], know))
+			memmove(&opts[j++], &opts[i], sizeof(Word));
 
 	num_opts = j;
 }
 
 void
-compare_to_target(WordColor out, Word guess, Word target)
+compare_to_target(WordColor out, const Word *guess, const Word *target)
 {
 	int8_t target_hist[32] = { 0 };
 
 	for (int i = 0; i < 5; ++i)
-		if (guess[i] != target[i])
-			++target_hist[target[i] - 'A'];
+		if (guess->letters[i] != target->letters[i])
+			++target_hist[target->letters[i] - 'A'];
 
 	for (int i = 0; i < 5; ++i) {
 		uint8_t color = DARK_COLOR;
 
-		if (target[i] == guess[i]) {
+		if (guess->letters[i] == target->letters[i]) {
 			color = GREEN_COLOR;
-		} else if (target_hist[guess[i] - 'A'] > 0) {
+		} else if (target_hist[guess->letters[i] - 'A'] > 0) {
 			color = YELLOW_COLOR;
-			--target_hist[guess[i] - 'A'];
+			--target_hist[guess->letters[i] - 'A'];
 		}
 
 		out[i] = color;
@@ -292,13 +281,13 @@ compare_to_target(WordColor out, Word guess, Word target)
 }
 
 int
-knowledge_from_colors(Know *know, Word guess, WordColor colors)
+knowledge_from_colors(Know *know, const Word *guess, WordColor colors)
 {
 	memset(know, 0, sizeof(Know));
 	Histogram yellow = { 0 };
 
 	for (int i = 0; i < 5; ++i) {
-		char letter = guess[i];
+		char letter = guess->letters[i];
 		switch (colors[i]) {
 		case GREEN_COLOR:
 			hist_add_letter(know->hist, letter);
@@ -318,12 +307,12 @@ knowledge_from_colors(Know *know, Word guess, WordColor colors)
 	}
 
 	for (int i = 0; i < 5; ++i) {
-		char letter = guess[i];
+		char letter = guess->letters[i];
 		if (colors[i] != DARK_COLOR || hist_count(yellow, letter) > 0)
 			continue;
 
 		for (int j = 0; j < 5; ++j)
-			if (guess[j] != letter)
+			if (guess->letters[j] != letter)
 				know->exclude[j] |= letter_bit(letter);
 	}
 
@@ -372,14 +361,14 @@ print_wordch(FILE *f, char ch, char nxt)
 }
 
 void
-print_word(FILE *f, Word word)
+print_word(FILE *f, const Word *word)
 {
 	extern Digraph *digraphs;
 	extern int num_digraphs;
 
 	for (int i = 0; i < 4; ++i)
-		print_wordch(f, word[i], word[i + 1]);
-	print_wordch(f, word[4], 0);
+		print_wordch(f, word->letters[i], word->letters[i + 1]);
+	print_wordch(f, word->letters[4], 0);
 }
 
 void
@@ -408,7 +397,7 @@ print_know(const Know *k)
 }
 
 double
-score_guess(Word guess, const Know *know, double break_at)
+score_guess(const Word *guess, const Know *know, double break_at)
 {
 	extern Word *opts;
 	extern int num_opts;
@@ -416,12 +405,12 @@ score_guess(Word guess, const Know *know, double break_at)
 	double guess_score = 1.0;
 	double norm = (1.0 / num_opts) * (1.0 / num_opts);
 
-	for (int j = 0; j < num_opts; ++j) {
-		if (memcmp(guess, opts[j], 5) == 0)
-			continue;
+	if (!word_matches(guess, know))
+		guess_score -= norm;
 
+	for (int j = 0; j < num_opts; ++j) {
 		WordColor wc;
-		compare_to_target(wc, guess, opts[j]);
+		compare_to_target(wc, guess, &opts[j]);
 
 		/*for (int k = 0; k < 5; ++k) {
 			switch (wc[k]) {
@@ -445,7 +434,7 @@ score_guess(Word guess, const Know *know, double break_at)
 
 		Know sim_know = *know;
 		absorb_knowledge(&sim_know, &new);
-		//int sim_opts = count_opts(&sim_know, opts[j]);
+		//int sim_opts = count_opts_(&sim_know, &opts[j]);
 		int sim_opts = count_opts(&sim_know);
 		guess_score -= sim_opts * norm;
 
@@ -484,20 +473,17 @@ best_guess_worker(void *info)
 	double best_local_score = 0.0;
 
 	for (int i = 0; i < pool_limit; ++i) {
-		Word guess;
-		memcpy(guess, pool[i], sizeof(Word));
-
-		double guess_score = score_guess(guess, &task->know, best_local_score);
+		double guess_score = score_guess(&pool[i], &task->know, best_local_score);
 
 		pthread_mutex_lock(&out->lock);
 		if (guess_score > out->best_score) {
-			memcpy(out->top[0], guess, sizeof(Word));
+			memcpy(&out->top[0], &pool[i], sizeof(Word));
 			out->best_score = guess_score;
 			out->num_out = 1;
 		} else if (guess_score == out->best_score) {
 			int j = out->num_out;
 			if (j < out->max_out)
-				memcpy(out->top[j], guess, sizeof(Word));
+				memcpy(&out->top[j], &pool[i], sizeof(Word));
 			++out->num_out;
 		}
 
@@ -531,7 +517,7 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 
 	Know nothing = no_knowledge();
 	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
-		memcpy(top[0], all_words[0], sizeof(Word));
+		memcpy(&top[0], &all_words[0], sizeof(Word));
 		*num_out = 1;
 		return initial_scores[0];
 	}

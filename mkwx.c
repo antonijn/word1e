@@ -26,7 +26,7 @@
 #include <string.h>
 
 typedef struct {
-	Word guess;
+	Word *guess;
 	double score;
 } InitialGuess;
 
@@ -61,8 +61,8 @@ build_index(void *info)
 	Know k = no_knowledge();
 	for (int i = from; i < until; ++i) {
 		InitialGuess *ig = output + i;
-		memcpy(ig->guess, all_words[i], sizeof(Word));
-		ig->score = score_guess(all_words[i], &k, 0.0);
+		ig->guess = &all_words[i];
+		ig->score = score_guess(&all_words[i], &k, 0.0);
 		if (verbosity > 0) {
 			int iscore = ig->score * 1000000.0;
 			print_word(stderr, ig->guess);
@@ -211,9 +211,9 @@ main(int argc, char **argv)
 		ranges[i].until = last_word;
 
 		fprintf(stderr, "task %d handling ", i);
-		print_word(stderr, all_words[ranges[i].from]);
+		print_word(stderr, &all_words[ranges[i].from]);
 		fprintf(stderr, "..");
-		print_word(stderr, all_words[last_word - 1]);
+		print_word(stderr, &all_words[last_word - 1]);
 		fprintf(stderr, "\n");
 	}
 
