@@ -472,6 +472,10 @@ score_guess(const Word *guess, const Know *know)
 	threadpool_destroy(pool, threadpool_graceful);
 
 	double score = 1.0;
+
+	if (word_matches(guess, know))
+		score += (1.0 / num_opts) * (1.0 / num_opts);
+
 	for (int i = 0; i < num_workers; ++i)
 		score += tasks[i].score_part;
 
@@ -487,8 +491,8 @@ score_guess_st(const Word *guess, const Know *know, double break_at)
 	double guess_score = 1.0;
 	double norm = (1.0 / num_opts) * (1.0 / num_opts);
 
-	if (!word_matches(guess, know))
-		guess_score -= norm;
+	if (word_matches(guess, know))
+		guess_score += norm;
 
 	for (int j = 0; j < num_opts; ++j) {
 		WordColor wc;
