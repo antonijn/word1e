@@ -142,7 +142,7 @@ score_guess(const Word *guess, const Know *know)
 
 	score_guess_worker(&tasks[0]);
 
-	threadpool_destroy(pool, threadpool_graceful);
+	threadpool_destroy(pool, THREADPOOL_GRACEFUL);
 
 	double score = 1.0;
 
@@ -277,7 +277,7 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 
 	best_guess_worker(&tasks[0]);
 
-	threadpool_destroy(pool, threadpool_graceful);
+	threadpool_destroy(pool, THREADPOOL_GRACEFUL);
 	pthread_mutex_destroy(&out.lock);
 
 	*num_out = out.num_out;

@@ -26,12 +26,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _THREADPOOL_H_
-#define _THREADPOOL_H_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma once
 
 /**
  * @file threadpool.h
@@ -48,15 +43,15 @@ extern "C" {
 typedef struct threadpool_t threadpool_t;
 
 typedef enum {
-    threadpool_invalid        = -1,
-    threadpool_lock_failure   = -2,
-    threadpool_queue_full     = -3,
-    threadpool_shutdown       = -4,
-    threadpool_thread_failure = -5
+	THREADPOOL_INVALID        = -1,
+	THREADPOOL_LOCK_FAILURE   = -2,
+	THREADPOOL_QUEUE_FULL     = -3,
+	THREADPOOL_SHUTDOWN       = -4,
+	THREADPOOL_THREAD_FAILURE = -5
 } threadpool_error_t;
 
 typedef enum {
-    threadpool_graceful       = 1
+	THREADPOOL_GRACEFUL       = 1
 } threadpool_destroy_flags_t;
 
 /**
@@ -79,8 +74,7 @@ threadpool_t *threadpool_create(int thread_count, int queue_size, int flags);
  * @return 0 if all goes well, negative values in case of error (@see
  * threadpool_error_t for codes).
  */
-int threadpool_add(threadpool_t *pool, void (*routine)(void *),
-                   void *arg, int flags);
+int threadpool_add(threadpool_t *pool, void (*routine)(void *), void *arg, int flags);
 
 /**
  * @function threadpool_destroy
@@ -93,9 +87,3 @@ int threadpool_add(threadpool_t *pool, void (*routine)(void *),
  * processes all pending tasks before shutdown.
  */
 int threadpool_destroy(threadpool_t *pool, int flags);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* _THREADPOOL_H_ */

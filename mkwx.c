@@ -224,7 +224,7 @@ main(int argc, char **argv)
 	for (int i = 0; i < 8; ++i)
 		threadpool_add(pool, build_index, &ranges[i], 0);
 
-	threadpool_destroy(pool, threadpool_graceful);
+	threadpool_destroy(pool, THREADPOOL_GRACEFUL);
 	fprintf(stderr, "tasks done!\n");
 	return compile_index(), 0;
 }
