@@ -38,9 +38,6 @@
 int
 count_opts(const Know *know)
 {
-	extern Word *opts;
-	extern int num_opts;
-
 	int res = 0;
 	for (int i = 0; i < num_opts; ++i)
 		if (word_matches(&opts[i], know))
@@ -75,9 +72,6 @@ typedef struct {
 static void
 score_guess_worker(void *info)
 {
-	extern Word *opts;
-	extern int num_opts;
-
 	ScoreTask *st = info;
 
 	Know know = *st->know;
@@ -107,10 +101,6 @@ score_guess_worker(void *info)
 double
 score_guess(const Word *guess, const Know *know)
 {
-	extern Word *all_words;
-	extern int num_opts, num_words;
-	extern double *initial_scores;
-
 	Know nothing = no_knowledge();
 	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
 		for (int i = 0; i < num_words; ++i) {
@@ -158,9 +148,6 @@ score_guess(const Word *guess, const Know *know)
 double
 score_guess_st(const Word *guess, const Know *know, double break_at)
 {
-	extern Word *opts;
-	extern int num_opts;
-
 	double guess_score = 1.0;
 	double norm = (1.0 / num_opts) * (1.0 / num_opts);
 
@@ -203,9 +190,6 @@ typedef struct {
 static void
 best_guess_worker(void *info)
 {
-	extern Word *opts, *all_words;
-	extern int num_opts, num_words, verbosity;
-
 	BestTask *task = info;
 	BestTaskOutput *out = task->out;
 	
@@ -236,10 +220,6 @@ best_guess_worker(void *info)
 double
 best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 {
-	extern Word *all_words;
-	extern int num_opts, num_words, verbosity;
-	extern double *initial_scores;
-
 	Know nothing = no_knowledge();
 	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
 		memcpy(&top[0], &all_words[0], sizeof(Word));

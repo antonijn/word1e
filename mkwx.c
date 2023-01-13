@@ -36,10 +36,6 @@ typedef struct {
 	int from, until;
 } Range;
 
-Word *all_words, *opts;
-Digraph *digraphs;
-double *initial_scores;
-int num_opts, num_words, verbosity = 0, num_digraphs;
 static const char *word_list;
 static char *out_path;
 static char *cmd;

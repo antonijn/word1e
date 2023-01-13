@@ -29,11 +29,8 @@
 #include "json.h"
 
 #define MAX_GIVEN_GUESSES 16
-Word *all_words, *opts, given_guesses[MAX_GIVEN_GUESSES];
-double *initial_scores;
-Digraph *digraphs;
-int num_opts, num_words, num_digraphs, num_given_guesses;
-int verbosity = 0, difficulty = 0;
+static Word given_guesses[MAX_GIVEN_GUESSES];
+static int num_given_guesses;
 static char *dict_path = "words-index.txt";
 static const char *target_str;
 static int max_score_samples = 65536;
@@ -624,9 +621,6 @@ static int
 handle_option(char opt, int *arg_idx, int argc, char **argv)
 {
 	switch (opt) {
-	case 'e':
-		--difficulty;
-		break;
 	case 'c':
 		set_mode((int *)&guess_mode, USER_GUESS);
 		break;

@@ -28,6 +28,11 @@ typedef struct {
 	char fst, snd, repr;
 } Digraph;
 
+extern Word *all_words, *opts;
+extern Digraph *digraphs;
+extern double *initial_scores;
+extern int num_opts, num_words, verbosity, num_digraphs;
+
 int scan_word(FILE *f, Word *out);
 void load_words(FILE *f);
 

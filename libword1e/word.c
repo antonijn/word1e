@@ -29,12 +29,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+Word *all_words, *opts;
+Digraph *digraphs;
+double *initial_scores;
+int num_opts, num_words, verbosity = 0, num_digraphs;
+
 static int
 scan_letter(FILE *f)
 {
-	extern Digraph *digraphs;
-	extern int num_digraphs;
-
 	int ch;
 	while ((ch = fgetc(f)) == '-')
 		;
@@ -79,11 +81,6 @@ scan_word(FILE *f, Word *out)
 void
 load_words(FILE *f)
 {
-	extern Word *all_words, *opts;
-	extern double *initial_scores;
-	extern Digraph *digraphs;
-	extern int num_words, num_opts, num_digraphs, verbosity;
-
 	int line = 1;
 
 	if (fscanf(f, "%d\n", &num_words) != 1) {
@@ -188,9 +185,6 @@ word_matches(const Word *word, const Know *know)
 void
 filter_opts(const Know *know)
 {
-	extern Word *opts;
-	extern int num_opts;
-
 	int j = 0;
 	for (int i = 0; i < num_opts; ++i)
 		if (word_matches(&opts[i], know))
@@ -276,9 +270,6 @@ absorb_knowledge(Know *restrict know, const Know *other)
 void
 print_wordch(FILE *f, char ch, char nxt)
 {
-	extern Digraph *digraphs;
-	extern int num_digraphs;
-
 	if (ch > 'Z') {
 		int dgidx = ch - 'Z' - 1;
 		if (dgidx >= num_digraphs) {
@@ -305,9 +296,6 @@ print_wordch(FILE *f, char ch, char nxt)
 void
 print_word(FILE *f, const Word *word)
 {
-	extern Digraph *digraphs;
-	extern int num_digraphs;
-
 	for (int i = 0; i < 4; ++i)
 		print_wordch(f, word->letters[i], word->letters[i + 1]);
 	print_wordch(f, word->letters[4], 0);
