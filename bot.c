@@ -26,12 +26,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <score.h>
-#include <word_tree.h>
 #include "json.h"
 
 #define MAX_GIVEN_GUESSES 16
 Word *all_words, *opts, given_guesses[MAX_GIVEN_GUESSES];
-WordNode *word_tree;
 double *initial_scores;
 Digraph *digraphs;
 int num_opts, num_words, num_digraphs, num_given_guesses;

@@ -8,6 +8,7 @@
 
 typedef struct {
 	char letters[5];
+	Histogram hist;
 } Word;
 
 typedef struct {

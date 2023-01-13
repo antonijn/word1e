@@ -24,7 +24,6 @@
 
 #include <word.h>
 #include <score.h>
-#include <word_tree.h>
 #include <threadpool.h>
 
 #include <stdio.h>
@@ -161,7 +160,6 @@ score_guess_st(const Word *guess, const Know *know, double break_at)
 {
 	extern Word *opts;
 	extern int num_opts;
-	extern WordNode *word_tree;
 
 	double guess_score = 1.0;
 	double norm = (1.0 / num_opts) * (1.0 / num_opts);
@@ -179,7 +177,7 @@ score_guess_st(const Word *guess, const Know *know, double break_at)
 		Know sim_know = *know;
 		absorb_knowledge(&sim_know, &new);
 
-		int sim_opts = word_tree_count(word_tree, &sim_know);
+		int sim_opts = count_opts(&sim_know);
 		guess_score -= sim_opts * norm;
 
 		if (guess_score < break_at)
@@ -241,7 +239,6 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 	extern Word *all_words;
 	extern int num_opts, num_words, verbosity;
 	extern double *initial_scores;
-	extern WordNode *word_tree;
 
 	Know nothing = no_knowledge();
 	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
@@ -249,8 +246,6 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 		*num_out = 1;
 		return initial_scores[0];
 	}
-
-	word_tree = word_tree_from_list();
 
 	BestTaskOutput out = {
 		.best_score = 0.0,
@@ -284,7 +279,6 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 
 	threadpool_destroy(pool, threadpool_graceful);
 	pthread_mutex_destroy(&out.lock);
-	free(word_tree);
 
 	*num_out = out.num_out;
 	return out.best_score;

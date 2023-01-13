@@ -70,6 +70,7 @@ scan_word(FILE *f, Word *out)
 		if (ch < 0)
 			return -1;
 		out->letters[i] = ch;
+		hist_add_letter(out->hist, ch);
 	}
 
 	return 0;
@@ -176,12 +177,8 @@ word_matches(const Word *word, const Know *know)
 			return false;
 	}
 
-	Histogram hist = { 0 };
-	for (int i = 0; i < 5; ++i)
-		hist_add_letter(hist, word->letters[i]);
-
-	for (int i = 0; i < sizeof(hist) / sizeof(hist[0]); ++i)
-		if ((hist[i] & know->hist[i]) != know->hist[i])
+	for (int i = 0; i < sizeof(word->hist) / sizeof(word->hist[0]); ++i)
+		if ((word->hist[i] & know->hist[i]) != know->hist[i])
 			return false;
 
 	return true;
