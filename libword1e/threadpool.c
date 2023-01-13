@@ -35,7 +35,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#include "threadpool.h"
+#include <threadpool.h>
 
 typedef enum {
     immediate_shutdown = 1,

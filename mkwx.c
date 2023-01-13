@@ -17,8 +17,9 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "guess.h"
-#include "threadpool.h"
+#include <score.h>
+#include <threadpool.h>
+#include <word_tree.h>
 #include <ctype.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -40,6 +41,7 @@ Word *all_words, *opts;
 Digraph *digraphs;
 double *initial_scores;
 int num_opts, num_words, verbosity = 0, num_digraphs;
+WordNode *word_tree;
 static const char *word_list;
 static char *out_path;
 static char *cmd;
@@ -203,6 +205,8 @@ main(int argc, char **argv)
 	if (word_list)
 		fclose(f);
 
+	word_tree = word_tree_from_list();
+
 	Range ranges[8];
 	int last_word = 0;
 	for (int i = 0; i < 8; ++i) {
@@ -225,6 +229,7 @@ main(int argc, char **argv)
 		threadpool_add(pool, build_index, &ranges[i], 0);
 
 	threadpool_destroy(pool, threadpool_graceful);
+	free(word_tree);
 	fprintf(stderr, "tasks done!\n");
 	return compile_index(), 0;
 }
