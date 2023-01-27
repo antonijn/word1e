@@ -202,13 +202,13 @@ best_guess_worker(void *info)
 
 		pthread_mutex_lock(&out->lock);
 		if (guess_score > out->best_score) {
-			memcpy(&out->top[0], &opts[i], sizeof(Word));
+			memcpy(&out->top[0], &all_words[i], sizeof(Word));
 			out->best_score = guess_score;
 			out->num_out = 1;
 		} else if (guess_score == out->best_score) {
 			int j = out->num_out;
 			if (j < out->max_out)
-				memcpy(&out->top[j], &opts[i], sizeof(Word));
+				memcpy(&out->top[j], &all_words[i], sizeof(Word));
 			++out->num_out;
 		}
 
@@ -225,6 +225,12 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 		memcpy(&top[0], &all_words[0], sizeof(Word));
 		*num_out = 1;
 		return initial_scores[0];
+	}
+
+	if (num_opts > 0 && num_opts <= 2) {
+		memcpy(&top[0], &opts[0], num_opts * sizeof(Word));
+		*num_out = num_opts;
+		return (5 - num_opts) * 0.25;
 	}
 
 	BestTaskOutput out = {
