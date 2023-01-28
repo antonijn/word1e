@@ -78,14 +78,86 @@ scan_word(FILE *f, Word *out)
 	return 0;
 }
 
-void
-load_words(FILE *f)
+ssize_t
+load_words(FILE *f, Word **words_out)
 {
+	if (f == NULL)
+		return -1;
+
+	int line = 1;
+
+	long init_pos = ftell(f);
+	if (init_pos < 0)
+		return -1;
+
+	if (fseek(f, 0, SEEK_END) < 0)
+		return -1;
+
+	long final_pos = ftell(f);
+	if (final_pos < 0)
+		return -1;
+
+	if (fseek(f, init_pos, init_pos) < 0)
+		return -1;
+
+	long size = final_pos - init_pos;
+	size_t max_num_words = (size + 1) / 6;
+
+	if (verbosity > 0)
+		fprintf(stderr, "max %zd words...\n", max_num_words);
+
+	Word *words = malloc(sizeof(Word) * max_num_words);
+
+	if (words == NULL) {
+		fprintf(stderr, "out of memory\n");
+		return -1;
+	}
+
+	ssize_t i;
+	for (i = 0; i < max_num_words; ++i) {
+		int ch;
+		while (isspace(ch = fgetc(f)) && ch != EOF)
+			if (ch == '\n')
+				++line;
+
+		if (ch == EOF)
+			break;
+
+		ungetc(ch, f);
+		if (scan_word(f, &words[i]) < 0) {
+			fprintf(stderr, "error: line %d\n", line);
+			goto error;
+		}
+
+		++line;
+	}
+
+	Word *resized_words = realloc(words, sizeof(Word) * i);
+	if (resized_words != NULL)
+		words = resized_words;
+
+	if (verbosity > 0)
+		fprintf(stderr, "read %zd words...\n", i);
+
+	*words_out = words;
+	return i;
+
+error:
+	free(words);
+	return -1;
+}
+
+int
+load_index(FILE *f)
+{
+	if (f == NULL)
+		return -1;
+
 	int line = 1;
 
 	if (fscanf(f, "%d\n", &num_words) != 1) {
 		fprintf(stderr, "error: expected word count on line 1\n");
-		exit(1);
+		return -1;
 	}
 	++line;
 
@@ -94,21 +166,19 @@ load_words(FILE *f)
 		char lnbuf[256];
 		if (!fgets(lnbuf, sizeof(lnbuf), f)) {
 			fprintf(stderr, "error: unexpected eof on line %d\n", line);
-			exit(1);
+			return -1;
 		}
 
-		if (!strcmp(lnbuf, "INDEXED\n")) {
-			initial_scores = malloc(sizeof(initial_scores[0]) * num_words);
-		} else if (!strncmp(lnbuf, "DIGRAPH ", 8)) {
+		if (!strncmp(lnbuf, "DIGRAPH ", 8)) {
 			if (num_digraphs >= 32 - 26) {
 				fprintf(stderr, "error: too many digraphs\n");
-				exit(1);
+				return -1;
 			}
 
 			char fst, snd;
 			if (sscanf(lnbuf + 8, "%c%c\n", &fst, &snd) != 2 || !isalpha(fst) || !isalpha(snd)) {
 				fprintf(stderr, "error: expected two characters after #DIGRAPH\n");
-				exit(1);
+				return -1;
 			}
 
 			++num_digraphs;
@@ -119,7 +189,7 @@ load_words(FILE *f)
 			di->repr = 'Z' + num_digraphs;
 		} else {
 			fprintf(stderr, "error: line %d\n", line);
-			exit(1);
+			return -1;
 		}
 
 		++line;
@@ -129,40 +199,45 @@ load_words(FILE *f)
 	if (verbosity > 0)
 		fprintf(stderr, "reading %d words...\n", num_words);
 
-	size_t all_words_size = sizeof(Word) * num_words;
-	all_words = malloc(all_words_size);
+	all_words      = malloc(sizeof(all_words[0])      * num_words);
+	initial_scores = malloc(sizeof(initial_scores[0]) * num_words);
+	opts           = malloc(sizeof(opts[0])           * num_words);
+
+	if (all_words == NULL || initial_scores == NULL || opts == NULL) {
+		fprintf(stderr, "out of memory\n");
+
+		free(all_words);
+		free(initial_scores);
+		free(opts);
+		return -1;
+	}
 
 	double last_score = 1.0;
 	for (int i = 0; i < num_words; ++i) {
 		if (scan_word(f, &all_words[i]) < 0) {
 			fprintf(stderr, "error: line %d\n", line);
-			exit(1);
+			return -1;
 		}
 
-		if (initial_scores) {
-			int iscore;
-			if (fscanf(f, " %6d\n", &iscore) != 1) {
-				fprintf(stderr, "error: wrong index on line %d\n", line);
-				exit(1);
-			}
-
-			double score = iscore / 1000000.0;
-			if (score > last_score) {
-				fprintf(stderr, "error: words must be given in decreasing scoring order (line %d)\n", line);
-				exit(1);
-			}
-
-			initial_scores[i] = last_score = score;
-		} else if (fgetc(f) != '\n') {
-			fprintf(stderr, "error: expected newline on line %d\n", line);
-			exit(1);
+		int iscore;
+		if (fscanf(f, " %6d\n", &iscore) != 1) {
+			fprintf(stderr, "error: wrong index on line %d\n", line);
+			return -1;
 		}
 
+		double score = iscore / 1000000.0;
+		if (score > last_score) {
+			fprintf(stderr, "error: words must be given in decreasing scoring order (line %d)\n", line);
+			return -1;
+		}
+
+		initial_scores[i] = last_score = score;
+		memcpy(&opts[i], &all_words[i], sizeof(Word));
 		++line;
 	}
 
-	opts = memcpy(malloc(all_words_size), all_words, all_words_size);
 	num_opts = num_words;
+	return 0;
 }
 
 bool
@@ -191,6 +266,10 @@ filter_opts(const Know *know)
 			memmove(&opts[j++], &opts[i], sizeof(Word));
 
 	num_opts = j;
+
+	Word *new_opts = realloc(opts, num_opts * sizeof(Word));
+	if (new_opts != NULL)
+		opts = new_opts;
 }
 
 void

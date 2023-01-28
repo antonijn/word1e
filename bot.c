@@ -723,11 +723,10 @@ main(int argc, char **argv)
 		perror(cmd);
 		exit(1);
 	}
-	load_words(f);
-	if (!initial_scores) {
-		fprintf(stderr, "need indexed dictionary (run mkwx first)\n");
+
+	if (load_index(f) < 0)
 		exit(1);
-	}
+
 	fclose(f);
 
 	if (target_mode == RANDOM_TARGET) {

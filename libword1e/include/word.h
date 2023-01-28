@@ -34,7 +34,8 @@ extern double *initial_scores;
 extern int num_opts, num_words, verbosity, num_digraphs;
 
 int scan_word(FILE *f, Word *out);
-void load_words(FILE *f);
+ssize_t load_words(FILE *f, Word **words_out);
+int load_index(FILE *f);
 
 static inline uint32_t
 letter_bit(char letter)

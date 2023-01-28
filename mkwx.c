@@ -195,9 +195,20 @@ main(int argc, char **argv)
 			exit(1);
 		}
 	}
-	load_words(f);
+
+	ssize_t snum_words = load_words(f, &all_words);
+
 	if (word_list)
 		fclose(f);
+
+	if (snum_words < 0)
+		exit(1);
+
+	num_words = snum_words;
+
+	/* we can do this, since filter_opts() is never called */
+	opts = all_words;
+	num_opts = num_words;
 
 	Range ranges[8];
 	int last_word = 0;
