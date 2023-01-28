@@ -246,7 +246,7 @@ bot_guesser(const Know *know, GuessReport *guess, GuessReport **best, int *num_b
 		int mod = (initial_options > num_words) ? num_words : initial_options;
 		int idx = rand() % mod;
 		memcpy(&guess->guess, &all_words[idx], sizeof(Word));
-		guess->score = initial_scores[idx];
+		guess->score = word_attrs[idx].starting_score;
 	} else {
 		*guess = (*best)[0];
 	}

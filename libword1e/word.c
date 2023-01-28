@@ -31,7 +31,7 @@
 
 Word *all_words, *opts;
 Digraph *digraphs;
-double *initial_scores;
+WordAttr *word_attrs;
 int num_opts, num_words, verbosity = 0, num_digraphs;
 
 static int
@@ -199,15 +199,15 @@ load_index(FILE *f)
 	if (verbosity > 0)
 		fprintf(stderr, "reading %d words...\n", num_words);
 
-	all_words      = malloc(sizeof(all_words[0])      * num_words);
-	initial_scores = malloc(sizeof(initial_scores[0]) * num_words);
-	opts           = malloc(sizeof(opts[0])           * num_words);
+	all_words  = malloc(sizeof(all_words[0])  * num_words);
+	word_attrs = malloc(sizeof(word_attrs[0]) * num_words);
+	opts       = malloc(sizeof(opts[0])       * num_words);
 
-	if (all_words == NULL || initial_scores == NULL || opts == NULL) {
+	if (all_words == NULL || word_attrs == NULL || opts == NULL) {
 		fprintf(stderr, "out of memory\n");
 
 		free(all_words);
-		free(initial_scores);
+		free(word_attrs);
 		free(opts);
 		return -1;
 	}
@@ -231,7 +231,9 @@ load_index(FILE *f)
 			return -1;
 		}
 
-		initial_scores[i] = last_score = score;
+		word_attrs[i].starting_score = last_score = score;
+		word_attrs[i].flags = 0;
+
 		memcpy(&opts[i], &all_words[i], sizeof(Word));
 		++line;
 	}

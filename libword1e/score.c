@@ -102,10 +102,10 @@ double
 score_guess(const Word *guess, const Know *know)
 {
 	Know nothing = no_knowledge();
-	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
+	if (word_attrs != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
 		for (int i = 0; i < num_words; ++i) {
 			if (memcmp(all_words[i].letters, guess->letters, 5) == 0)
-				return initial_scores[i];
+				return word_attrs[i].starting_score;
 		}
 	}
 
@@ -221,10 +221,10 @@ double
 best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 {
 	Know nothing = no_knowledge();
-	if (initial_scores != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
+	if (word_attrs != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
 		memcpy(&top[0], &all_words[0], sizeof(Word));
 		*num_out = 1;
-		return initial_scores[0];
+		return word_attrs[0].starting_score;
 	}
 
 	if (num_opts > 0 && num_opts <= 2) {

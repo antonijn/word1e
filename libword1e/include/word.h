@@ -16,6 +16,15 @@ typedef struct {
 	Histogram hist;
 } Know;
 
+typedef struct {
+	double starting_score;
+	enum {
+		WA_TARGET   = 0x1, /* may be a target word */
+		WA_EXPLICIT = 0x2, /* word may be considered explicit */
+		WA_SLUR     = 0x4, /* word is a slur */
+	} flags;
+} WordAttr;
+
 #define no_knowledge() ((Know){ 0 })
 
 #define DARK_COLOR   0
@@ -30,7 +39,7 @@ typedef struct {
 
 extern Word *all_words, *opts;
 extern Digraph *digraphs;
-extern double *initial_scores;
+extern WordAttr *word_attrs;
 extern int num_opts, num_words, verbosity, num_digraphs;
 
 int scan_word(FILE *f, Word *out);
