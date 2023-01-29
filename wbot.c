@@ -34,7 +34,6 @@ static Word given_guesses[MAX_GIVEN_GUESSES];
 static int num_given_guesses;
 static char *dict_path = "words-index.txt";
 static const char *target_str;
-static int max_score_samples = 65536;
 
 static enum { FIXED_TARGET, PUZZLE_TARGET, RANDOM_TARGET, PRINT_WORD_LIST, } target_mode = -1;
 static enum { BOT_GUESS, USER_GUESS, GIVEN_GUESS, } guess_mode = -1;
@@ -193,20 +192,6 @@ print_guesses(Word *top, int max, int n, double score)
 	printf(" (score %.1f%%, exp %.2f)\n", score * 100.0, exp_opts);
 }
 
-/*
-static void
-random_sample(void)
-{
-	for (int i = 0; i < max_score_samples; ++i) {
-		int j = random() % (long)num_opts;
-		Word temp;
-		memcpy(temp, opts[i], sizeof(Word));
-		memmove(opts[i], opts[j], sizeof(Word));
-		memcpy(opts[j], temp, sizeof(Word));
-	}
-}
-*/
-
 static void
 best_reports(const Know *know, GuessReport **best, int *num_best)
 {
@@ -214,11 +199,6 @@ best_reports(const Know *know, GuessReport **best, int *num_best)
 	Word *top_words = malloc(sizeof(Word) * max_top_guesses);
 
 	int num_all_opts = num_opts;
-
-	/*
-	if (max_score_samples < num_opts)
-		random_sample();
-	*/
 
 	int n;
 	double best_score = best_guesses(top_words, max_top_guesses, &n, know);
