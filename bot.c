@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <score.h>
 #include "json.h"
+#include "word.h"
 
 #define MAX_GIVEN_GUESSES 16
 static Word given_guesses[MAX_GIVEN_GUESSES];
@@ -242,7 +243,7 @@ bot_guesser(const Know *know, GuessReport *guess, GuessReport **best, int *num_b
 {
 	best_reports(know, best, num_best);
 
-	if (num_opts == num_words && initial_options > 1) {
+	if (has_no_knowledge(know) && initial_options > 1) {
 		int mod = (initial_options > num_words) ? num_words : initial_options;
 		int idx = rand() % mod;
 		memcpy(&guess->guess, &all_words[idx], sizeof(Word));
@@ -730,8 +731,8 @@ main(int argc, char **argv)
 	fclose(f);
 
 	if (target_mode == RANDOM_TARGET) {
-		int idx = random() % num_words;
-		memcpy(&target, &all_words[idx], sizeof(Word));
+		int idx = random() % num_opts;
+		memcpy(&target, &opts[idx], sizeof(Word));
 		target_mode = FIXED_TARGET;
 	}
 

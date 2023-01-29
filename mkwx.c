@@ -28,6 +28,7 @@
 typedef struct {
 	Word *guess;
 	double score;
+	WordAttr attr;
 } InitialGuess;
 
 static InitialGuess *output;
@@ -36,7 +37,7 @@ typedef struct {
 	int from, until;
 } Range;
 
-static const char *word_list;
+static const char *word_list, *target_path;
 static char *out_path;
 static char *cmd;
 
@@ -46,6 +47,20 @@ ig_compar(const void *lptr, const void *rptr)
 	InitialGuess l = *(InitialGuess *)lptr;
 	InitialGuess r = *(InitialGuess *)rptr;
 	return (l.score < r.score) - (l.score > r.score);
+}
+
+static int
+w_compar(const void *lptr, const void *rptr)
+{
+	Word l = *(Word *)lptr;
+	Word r = *(Word *)rptr;
+
+	char lbuf[6], rbuf[6];
+	memcpy(lbuf, l.letters, 5);
+	memcpy(rbuf, r.letters, 5);
+	lbuf[5] = rbuf[5] = '\0';
+
+	return strcmp(lbuf, rbuf);
 }
 
 static void
@@ -67,11 +82,49 @@ build_index(void *info)
 	}
 }
 
+static int
+calc_attrs(const Word *word, Word *sorted_opts)
+{
+	int res = 0;
+	if (bsearch(word, sorted_opts, num_opts, sizeof(Word), w_compar))
+		res |= WA_TARGET;
+
+	return res;
+}
+
+static void
+print_attrs(FILE *fout, int attr)
+{
+	if (attr == 0)
+		return;
+
+	fputc(' ', fout);
+
+	if (attr & WA_TARGET)
+		fputc('t', fout);
+	if (attr & WA_EXPLICIT)
+		fputc('x', fout);
+	if (attr & WA_SLUR)
+		fputc('s', fout);
+}
+
 static void
 compile_index(void)
 {
 	fprintf(stderr, "sorting output...");
 	qsort(output, num_words, sizeof(InitialGuess), ig_compar);
+	fprintf(stderr, " done!\n");
+
+	fprintf(stderr, "sorting target list...");
+	Word *sorted_opts = malloc(num_opts * sizeof(Word));
+	if (sorted_opts == NULL) {
+		fprintf(stderr, "out of memory!\n");
+		exit(1);
+	}
+
+	memcpy(sorted_opts, opts, num_opts * sizeof(Word));
+	qsort(sorted_opts, num_opts, sizeof(Word), w_compar);
+
 	fprintf(stderr, " done!\n");
 
 	fprintf(stderr, "writing output...");
@@ -85,19 +138,25 @@ compile_index(void)
 	}
 
 	fprintf(fout, "%d\n", num_words);
-	fprintf(fout, "#INDEXED\n");
-	for (int i = 0; i < num_digraphs; ++i) {
+	for (int i = 0; i < num_digraphs; ++i)
 		fprintf(fout, "#DIGRAPH %c%c\n", digraphs[i].fst, digraphs[i].snd);
-	}
 
 	for (int i = 0; i < num_words; ++i) {
 		int iscore = output[i].score * 1000000.0;
 		print_word(fout, output[i].guess);
-		fprintf(fout, " %06d\n", iscore);
+		fprintf(fout, " %06d", iscore);
+
+		int attr = calc_attrs(output[i].guess, sorted_opts);
+		print_attrs(fout, attr);
+
+		fputc('\n', fout);
 	}
 
 	if (out_path)
 		fclose(fout);
+
+	free(sorted_opts);
+
 	fprintf(stderr, " done!\n");
 }
 
@@ -109,6 +168,7 @@ print_usage(void)
 	       "Options:\n"
 	       "  -o PATH               Output index.\n"
 	       "  -v                    Verbose output.\n"
+	       "  --target PATH         Path to file of possible target words.\n"
 	       "  --help                Show this message.\n\n", cmd);
 }
 
@@ -118,6 +178,17 @@ handle_string_option(const char *arg, int *arg_idx, int argc, char **argv)
 	if (0 == strcmp(arg, "--help")) {
 		print_usage();
 		exit(0);
+	}
+
+	if (0 == strcmp(arg, "--target")) {
+		if (argc <= *arg_idx + 1) {
+			fprintf(stderr, "expected argument after --target\n");
+			print_usage();
+			return -1;
+		}
+
+		target_path = argv[++*arg_idx];
+		return 0;
 	}
 
 	fprintf(stderr, "unknown option `%s'\n", arg);
@@ -181,12 +252,9 @@ handle_args(int argc, char **argv)
 	return 0;
 }
 
-int
-main(int argc, char **argv)
+static void
+read_word_list(void)
 {
-	if (handle_args(argc, argv) < 0)
-		exit(1);
-
 	FILE *f = stdin;
 	if (word_list) {
 		f = fopen(word_list, "r");
@@ -205,10 +273,42 @@ main(int argc, char **argv)
 		exit(1);
 
 	num_words = snum_words;
+}
 
-	/* we can do this, since filter_opts() is never called */
-	opts = all_words;
-	num_opts = num_words;
+static void
+read_target_list(void)
+{
+	if (target_path == NULL) {
+		/* we can do this, since filter_opts() is never called */
+		opts = all_words;
+		num_opts = num_words;
+		return;
+	}
+
+	FILE *f = fopen(target_path, "r");
+	if (!f) {
+		perror(cmd);
+		exit(1);
+	}
+
+	ssize_t snum_words = load_words(f, &opts);
+
+	fclose(f);
+
+	if (snum_words < 0)
+		exit(1);
+
+	num_opts = snum_words;
+}
+
+int
+main(int argc, char **argv)
+{
+	if (handle_args(argc, argv) < 0)
+		exit(1);
+
+	read_word_list();
+	read_target_list();
 
 	Range ranges[8];
 	int last_word = 0;

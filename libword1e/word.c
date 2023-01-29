@@ -20,6 +20,7 @@
 
 #ifndef _GNU_SOURCE
 #  define _GNU_SOURCE
+#include <stdbool.h>
 #endif
 
 #include <word.h>
@@ -147,6 +148,43 @@ error:
 	return -1;
 }
 
+static int
+read_attrs(FILE *f, int line)
+{
+	int ch = fgetc(f);
+	if (ch == '\n')
+		return 0;
+
+	if (ch != ' ') {
+		fprintf(stderr, "error: expected whitespace (line %d)\n", line);
+		return -1;
+	}
+
+	int res = 0;
+	bool should_break = false;
+	while (!should_break) {
+		switch (fgetc(f)) {
+		case 't':
+			res |= WA_TARGET;
+			break;
+		case 'x':
+			res |= WA_EXPLICIT;
+			break;
+		case 's':
+			res |= WA_SLUR;
+			break;
+		case '\n':
+			should_break = true;
+			break;
+		default:
+			fprintf(stderr, "error: unexpected attribute character (line %d)\n", line);
+			return -1;
+		}
+	}
+
+	return res;
+}
+
 int
 load_index(FILE *f)
 {
@@ -212,6 +250,7 @@ load_index(FILE *f)
 		return -1;
 	}
 
+	num_opts = 0;
 	double last_score = 1.0;
 	for (int i = 0; i < num_words; ++i) {
 		if (scan_word(f, &all_words[i]) < 0) {
@@ -220,7 +259,7 @@ load_index(FILE *f)
 		}
 
 		int iscore;
-		if (fscanf(f, " %6d\n", &iscore) != 1) {
+		if (fscanf(f, " %6d", &iscore) != 1) {
 			fprintf(stderr, "error: wrong index on line %d\n", line);
 			return -1;
 		}
@@ -232,14 +271,34 @@ load_index(FILE *f)
 		}
 
 		word_attrs[i].starting_score = last_score = score;
-		word_attrs[i].flags = 0;
+		int attr = read_attrs(f, line);
+		if (attr < 0)
+			return -1;
 
-		memcpy(&opts[i], &all_words[i], sizeof(Word));
+		word_attrs[i].flags = attr;
+
+		if (attr == WA_TARGET) {
+			memcpy(&opts[num_opts], &all_words[i], sizeof(Word));
+			++num_opts;
+		}
+
 		++line;
 	}
 
-	num_opts = num_words;
 	return 0;
+}
+
+bool
+has_no_knowledge(const Know *know)
+{
+	const Know k = no_knowledge();
+	if (memcmp(know->exclude, k.exclude, sizeof(k.exclude)) != 0)
+		return false;
+
+	if (memcmp(know->hist, k.hist, sizeof(k.hist)) != 0)
+		return false;
+
+	return true;
 }
 
 bool

@@ -58,6 +58,7 @@ bit_letter(uint32_t bit)
 	return __builtin_ctz(bit) + 'A';
 }
 
+bool has_no_knowledge(const Know *know);
 bool word_matches(const Word *word, const Know *know);
 void filter_opts(const Know *know);
 void compare_to_target(WordColor out, const Word *guess, const Word *target);
