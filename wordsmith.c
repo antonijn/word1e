@@ -10,7 +10,7 @@
 static char *cmd;
 static Word target, *guesses, *top_words_buf;
 static int num_guesses, max_top_words;
-JSONWriter *json;
+static JSONWriter *json;
 
 static int
 load_word(char *word_str, Word *word)
