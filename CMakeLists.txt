@@ -7,8 +7,10 @@ add_subdirectory(libword1e)
 
 add_executable(mkwx mkwx.c)
 add_executable(wbot json.c wbot.c)
+add_executable(wordsmith json.c wordsmith.c)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-target_link_libraries(wbot PRIVATE word1e Threads::Threads)
 target_link_libraries(mkwx PRIVATE word1e Threads::Threads)
+target_link_libraries(wbot PRIVATE word1e Threads::Threads)
+target_link_libraries(wordsmith PRIVATE word1e Threads::Threads)

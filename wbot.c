@@ -198,12 +198,8 @@ best_reports(const Know *know, GuessReport **best, int *num_best)
 	const int max_top_guesses = 16;
 	Word *top_words = malloc(sizeof(Word) * max_top_guesses);
 
-	int num_all_opts = num_opts;
-
 	int n;
 	double best_score = best_guesses(top_words, max_top_guesses, &n, know);
-
-	num_opts = num_all_opts;
 
 	int m = (n < max_top_guesses) ? n : max_top_guesses;
 	GuessReport *reports = malloc(sizeof(GuessReport) * m);
