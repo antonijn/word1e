@@ -362,7 +362,7 @@ run(Guesser guesser, Oracle oracle, Know k)
 
 		free(best);
 
-		if (memcmp(&target, &guess.guess, 5) == 0)
+		if (all_green(wc))
 			break;
 	}
 

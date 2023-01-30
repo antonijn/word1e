@@ -186,15 +186,6 @@ report(const Word *user,
 	return 0;
 }
 
-static bool
-all_green(WordColor wc)
-{
-	for (int i = 0; i < 5; ++i)
-		if (wc[i] != GREEN_COLOR)
-			return false;
-	return true;
-}
-
 static void
 select_guess(const Word **guess_out, const Word *top_words_buf, int num_top, int guess_idx)
 {

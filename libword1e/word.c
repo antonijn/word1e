@@ -333,6 +333,15 @@ filter_opts(const Know *know)
 		opts = new_opts;
 }
 
+bool
+all_green(WordColor wc)
+{
+	for (int i = 0; i < 5; ++i)
+		if (wc[i] != GREEN_COLOR)
+			return false;
+	return true;
+}
+
 void
 compare_to_target(WordColor out, const Word *guess, const Word *target)
 {

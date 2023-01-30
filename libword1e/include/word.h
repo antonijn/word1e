@@ -61,6 +61,7 @@ bit_letter(uint32_t bit)
 bool has_no_knowledge(const Know *know);
 bool word_matches(const Word *word, const Know *know);
 void filter_opts(const Know *know);
+bool all_green(WordColor wc);
 void compare_to_target(WordColor out, const Word *guess, const Word *target);
 int knowledge_from_colors(Know *know, const Word *guess, WordColor colors);
 int absorb_knowledge(Know *know, const Know *other);
