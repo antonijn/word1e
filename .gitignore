@@ -3,7 +3,8 @@
 *.so
 Makefile
 mkwx
-word1e-solve
+wbot
+wordsmith
 *.txt
 !CMakeLists.txt
 !words-index.txt
