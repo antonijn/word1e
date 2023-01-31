@@ -33,7 +33,8 @@
 
 #include <sched.h>
 
-#define MAX_WORKERS 64
+#define MIN_WORK_SIZE 128
+#define MAX_TASKS     256
 
 int
 count_opts(const Know *know)
@@ -63,7 +64,7 @@ cpu_count(void)
 }
 
 typedef struct {
-	int offset, stride;
+	int from, to;
 	const Know *know;
 	const Word *guess;
 	double score_part;
@@ -76,12 +77,12 @@ score_guess_worker(void *info)
 
 	Know know = *st->know;
 	const Word *guess = st->guess;
-	const int stride = st->stride;
 
 	double score_part = 0.0;
 	double norm = (1.0 / num_opts) * (1.0 / num_opts);
 
-	for (int j = st->offset; j < num_opts; j += stride) {
+	int from = st->from, to = st->to;
+	for (int j = from; j < to; ++j) {
 		WordColor wc;
 		compare_to_target(wc, guess, &opts[j]);
 
@@ -99,59 +100,58 @@ score_guess_worker(void *info)
 }
 
 double
-score_guess(const Word *guess, const Know *know)
+score_guess_with_attr(const Word *guess, const WordAttr *attr, const Know *know)
 {
 	Know nothing = no_knowledge();
-	if (word_attrs != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
-		for (int i = 0; i < num_words; ++i) {
-			if (memcmp(all_words[i].letters, guess->letters, 5) == 0)
-				return word_attrs[i].starting_score;
-		}
-	}
+	if (attr != NULL && has_no_knowledge(know))
+		return attr->starting_score;
 
-	ScoreTask tasks[MAX_WORKERS];
+	ScoreTask tasks[MAX_TASKS];
 
-	int num_workers = 1 + num_opts / 100;
-	int max_workers = cpu_count();
-	if (max_workers > MAX_WORKERS)
-		max_workers = MAX_WORKERS;
+	int num_tasks = 1 + (num_opts - 1) / MIN_WORK_SIZE;
+	if (num_tasks > MAX_TASKS)
+		num_tasks = MAX_TASKS;
 
-	if (num_workers > max_workers)
-		num_workers = max_workers;
-
-	for (int i = 0; i < num_workers; ++i) {
-		tasks[i].offset = i;
-		tasks[i].stride = num_workers;
+	threadpool_t *pool = threadpool_create(cpu_count(), num_tasks, 0);
+	for (int i = 0; i < num_tasks; ++i) {
+		tasks[i].from = i * num_opts / num_tasks;
+		tasks[i].to = (i + 1) * num_opts / num_tasks;
 		tasks[i].know = know;
 		tasks[i].guess = guess;
-	}
 
-	threadpool_t *pool = threadpool_create(num_workers, num_workers * 2, 0);
-	for (int i = 1; i < num_workers; ++i)
 		threadpool_add(pool, score_guess_worker, &tasks[i], 0);
-
-	score_guess_worker(&tasks[0]);
+	}
 
 	threadpool_destroy(pool, THREADPOOL_GRACEFUL);
 
 	double score = 1.0;
 
-	if (word_matches(guess, know))
+	if ((attr == NULL || (attr->flags & WA_TARGET)) && word_matches(guess, know))
 		score += (1.0 / num_opts) * (1.0 / num_opts);
 
-	for (int i = 0; i < num_workers; ++i)
+	for (int i = 0; i < num_tasks; ++i)
 		score += tasks[i].score_part;
 
 	return score;
 }
 
 double
-score_guess_st(const Word *guess, const Know *know, double break_at)
+score_guess(const Word *guess, const Know *know)
+{
+	int i = index_of_word(guess);
+	const WordAttr *attr = NULL;
+	if (i >= 0 && word_attrs != NULL)
+		attr = &word_attrs[i];
+	return score_guess_with_attr(guess, attr, know);
+}
+
+double
+score_guess_st(const Word *guess, const WordAttr *attr, const Know *know, double break_at)
 {
 	double guess_score = 1.0;
 	double norm = (1.0 / num_opts) * (1.0 / num_opts);
 
-	if (word_matches(guess, know))
+	if ((attr == NULL || (attr->flags & WA_TARGET)) && word_matches(guess, know))
 		guess_score += norm;
 
 	for (int j = 0; j < num_opts; ++j) {
@@ -182,7 +182,7 @@ typedef struct {
 } BestTaskOutput;
 
 typedef struct {
-	int offset, stride;
+	int from, to;
 	BestTaskOutput *out;
 	Know know;
 } BestTask;
@@ -192,13 +192,15 @@ best_guess_worker(void *info)
 {
 	BestTask *task = info;
 	BestTaskOutput *out = task->out;
-	
-	const int stride = task->stride;
 
 	double best_local_score = 0.0;
 
-	for (int i = task->offset; i < num_words; i += stride) {
-		double guess_score = score_guess_st(&all_words[i], &task->know, best_local_score);
+	int from = task->from, to = task->to;
+	for (int i = from; i < to; ++i) {
+		double guess_score = score_guess_st(&all_words[i],
+		                                    &word_attrs[i],
+		                                    &task->know,
+		                                    best_local_score);
 
 		pthread_mutex_lock(&out->lock);
 		if (guess_score > out->best_score) {
@@ -242,26 +244,21 @@ best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 
 	pthread_mutex_init(&out.lock, NULL);
 
-	BestTask tasks[MAX_WORKERS];
+	BestTask tasks[MAX_TASKS];
 
-	int max_workers = cpu_count();
-	if (max_workers > MAX_WORKERS)
-		max_workers = MAX_WORKERS;
+	int num_tasks = 1 + (num_words - 1) / MIN_WORK_SIZE;
+	if (num_tasks > MAX_TASKS)
+		num_tasks = MAX_TASKS;
 
-	int num_workers = max_workers;
-
-	for (int i = 0; i < num_workers; ++i) {
-		tasks[i].offset = i;
-		tasks[i].stride = num_workers;
+	threadpool_t *pool = threadpool_create(cpu_count(), num_tasks, 0);
+	for (int i = 0; i < num_tasks; ++i) {
+		tasks[i].from = i * num_words / num_tasks;
+		tasks[i].to = (i + 1) * num_words / num_tasks;
 		tasks[i].know = *know;
 		tasks[i].out = &out;
-	}
 
-	threadpool_t *pool = threadpool_create(num_workers, num_workers * 2, 0);
-	for (int i = 1; i < num_workers; ++i)
 		threadpool_add(pool, best_guess_worker, &tasks[i], 0);
-
-	best_guess_worker(&tasks[0]);
+	}
 
 	threadpool_destroy(pool, THREADPOOL_GRACEFUL);
 	pthread_mutex_destroy(&out.lock);

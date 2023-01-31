@@ -58,6 +58,7 @@ bit_letter(uint32_t bit)
 	return __builtin_ctz(bit) + 'A';
 }
 
+int index_of_word(const Word *word);
 bool has_no_knowledge(const Know *know);
 bool word_matches(const Word *word, const Know *know);
 void filter_opts(const Know *know);

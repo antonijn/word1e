@@ -219,7 +219,7 @@ solve(int argc, char **argv)
 		double best_score = best_guesses(top_words_buf, max_top_words, &n, &k);
 
 		/* shouldn't happen, but let's be safe */
-		if (n == 0)
+		if (n <= 0)
 			break;
 
 		const Word *guess;

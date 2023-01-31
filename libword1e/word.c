@@ -35,6 +35,17 @@ Digraph *digraphs;
 WordAttr *word_attrs;
 int num_opts, num_words, verbosity = 0, num_digraphs;
 
+int
+index_of_word(const Word *word)
+{
+	for (int i = 0; i < num_words; ++i) {
+		if (memcmp(all_words[i].letters, word->letters, 5) == 0)
+			return i;
+	}
+
+	return -1;
+}
+
 static int
 scan_letter(FILE *f)
 {
