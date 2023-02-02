@@ -34,6 +34,7 @@ Word *all_words, *opts;
 Digraph *digraphs;
 WordAttr *word_attrs;
 int num_opts, num_words, verbosity = 0, num_digraphs;
+enum option_catalog opt_catalog = OC_NONE;
 
 int
 index_of_word(const Word *word)
@@ -270,7 +271,7 @@ load_index(FILE *f)
 		}
 
 		int iscore;
-		if (fscanf(f, " %6d", &iscore) != 1) {
+		if (fscanf(f, " 0.%6d", &iscore) != 1) {
 			fprintf(stderr, "error: wrong index on line %d\n", line);
 			return -1;
 		}
@@ -296,6 +297,7 @@ load_index(FILE *f)
 		++line;
 	}
 
+	opt_catalog = OC_TARGET;
 	return 0;
 }
 
@@ -340,8 +342,35 @@ filter_opts(const Know *know)
 	num_opts = j;
 
 	Word *new_opts = realloc(opts, num_opts * sizeof(Word));
-	if (new_opts != NULL)
+	if (new_opts != NULL || num_opts == 0)
 		opts = new_opts;
+}
+
+int
+update_opts(const Know *know)
+{
+	int prev_num_opts = num_opts;
+	filter_opts(know);
+	int elim = prev_num_opts - num_opts;
+
+	if (num_opts > 0 || opt_catalog != OC_TARGET)
+		return elim;
+
+	free(opts);
+
+	opts = malloc(sizeof(Word) * num_words);
+	if (opts == NULL) {
+		fprintf(stderr, "out of memory\n");
+		return -1;
+	}
+
+	memcpy(opts, all_words, sizeof(Word) * num_words);
+	num_opts = num_words;
+
+	filter_opts(know);
+	opt_catalog = OC_ALL;
+
+	return elim;
 }
 
 bool

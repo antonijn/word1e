@@ -77,7 +77,7 @@ build_index(void *info)
 		if (verbosity > 0) {
 			int iscore = ig->score * 1000000.0;
 			print_word(stderr, ig->guess);
-			fprintf(stderr, " %06d\n", iscore);
+			fprintf(stderr, " 0.%06d\n", iscore);
 		}
 	}
 }

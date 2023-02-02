@@ -353,10 +353,9 @@ run(Guesser guesser, Oracle oracle, Know k)
 		Know new = oracle(&guess.guess, wc);
 		absorb_knowledge(&k, &new);
 
-		int prev_num_opts = num_opts;
-		filter_opts(&k);
-
-		int eliminated = prev_num_opts - num_opts;
+		int elim = update_opts(&k);
+		if (elim < 0)
+			exit(1);
 
 		print_opts_left();
 

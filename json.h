@@ -1,5 +1,4 @@
-#ifndef JSON_H
-#define JSON_H
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -35,5 +34,3 @@ void json_enter_dict(JSONWriter *j);
 void json_leave_dict(JSONWriter *j);
 void json_enter_list(JSONWriter *j);
 void json_leave_list(JSONWriter *j);
-
-#endif

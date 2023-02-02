@@ -37,10 +37,17 @@ typedef struct {
 	char fst, snd, repr;
 } Digraph;
 
+enum option_catalog {
+	OC_NONE,
+	OC_TARGET,
+	OC_ALL,
+};
+
 extern Word *all_words, *opts;
 extern Digraph *digraphs;
 extern WordAttr *word_attrs;
 extern int num_opts, num_words, verbosity, num_digraphs;
+extern enum option_catalog opt_catalog;
 
 int scan_word(FILE *f, Word *out);
 ssize_t load_words(FILE *f, Word **words_out);
@@ -62,6 +69,7 @@ int index_of_word(const Word *word);
 bool has_no_knowledge(const Know *know);
 bool word_matches(const Word *word, const Know *know);
 void filter_opts(const Know *know);
+int update_opts(const Know *know);
 bool all_green(WordColor wc);
 void compare_to_target(WordColor out, const Word *guess, const Word *target);
 int knowledge_from_colors(Know *know, const Word *guess, WordColor colors);

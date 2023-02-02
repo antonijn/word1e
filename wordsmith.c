@@ -101,7 +101,8 @@ prep_guesses(Know *k, int n)
 		absorb_knowledge(k, &new);
 	}
 
-	filter_opts(k);
+	if (update_opts(k) < 0)
+		exit(1);
 }
 
 static void
@@ -233,10 +234,11 @@ solve(int argc, char **argv)
 
 		absorb_knowledge(&k, &new);
 
-		int prev_num_opts = num_opts;
-		filter_opts(&k);
+		int elim = update_opts(&k);
+		if (elim < 0)
+			return 1;
 
-		report(guess, best_score, wc, top_words_buf, n, best_score, prev_num_opts - num_opts);
+		report(guess, best_score, wc, top_words_buf, n, best_score, elim);
 
 		if (all_green(wc))
 			break;
@@ -276,10 +278,11 @@ coach(int argc, char **argv)
 
 	absorb_knowledge(&k, &new);
 
-	int prev_num_opts = num_opts;
-	filter_opts(&k);
+	int elim = update_opts(&k);
+	if (elim < 0)
+		return 1;
 
-	report(user_guess, user_score, wc, top_words_buf, n, best_score, prev_num_opts - num_opts);
+	report(user_guess, user_score, wc, top_words_buf, n, best_score, elim);
 	return 0;
 }
 
@@ -389,7 +392,7 @@ main(int argc, char **argv)
 	if (guesses == NULL || top_words_buf == NULL) {
 		free(guesses);
 		fprintf(stderr, "out of memory\n");
-		return -1;
+		return 1;
 	}
 
 	JSONWriter writer = { 0 };
@@ -404,10 +407,8 @@ main(int argc, char **argv)
 	json_writer_destroy(json);
 	free(top_words_buf);
 	free(guesses);
-	/*
 	free(opts);
 	free(all_words);
-	*/
 
 	return rc;
 }
