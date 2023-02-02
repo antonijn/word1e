@@ -399,6 +399,8 @@ main(int argc, char **argv)
 
 	int rc = cb(argc, argv);
 
+	putchar('\n');
+
 	json_writer_destroy(json);
 	free(top_words_buf);
 	free(guesses);
