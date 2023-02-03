@@ -102,7 +102,6 @@ score_guess_worker(void *info)
 double
 score_guess_with_attr(const Word *guess, const WordAttr *attr, const Know *know)
 {
-	Know nothing = no_knowledge();
 	if (attr != NULL && has_no_knowledge(know))
 		return attr->starting_score;
 
@@ -194,15 +193,14 @@ suggest(BestTaskOutput *out, int guess_idx, double guess_score)
 		return;
 
 	if (guess_score > out->best_score) {
-		out->top[0] = all_words[guess_idx];
+		out->num_out = 0;
 		out->best_score = guess_score;
-		out->num_out = 1;
-	} else {
-		int j = out->num_out;
-		if (j < out->max_out)
-			out->top[j] = all_words[guess_idx];
-		++out->num_out;
 	}
+
+	if (out->num_out < out->max_out)
+		out->top[out->num_out] = all_words[guess_idx];
+
+	++out->num_out;
 }
 
 static void
@@ -232,9 +230,8 @@ best_guess_worker(void *info)
 double
 best_guesses(Word *top, int max_out, int *num_out, const Know *know)
 {
-	Know nothing = no_knowledge();
-	if (word_attrs != NULL && memcmp(&nothing, know, sizeof(*know)) == 0) {
-		memcpy(&top[0], &all_words[0], sizeof(Word));
+	if (word_attrs != NULL && has_no_knowledge(know)) {
+		top[0] = all_words[0];
 		*num_out = 1;
 		return word_attrs[0].starting_score;
 	}

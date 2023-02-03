@@ -88,7 +88,7 @@ build_index(void *info)
 	Range *r = info;
 	int from = r->from, until = r->until;
 
-	Know k = no_knowledge();
+	Know k = { 0 };
 	for (int i = from; i < until; ++i) {
 		InitialGuess *ig = output + i;
 		ig->guess = &all_words[i];

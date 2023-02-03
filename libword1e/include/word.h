@@ -25,8 +25,6 @@ typedef struct {
 	} flags;
 } WordAttr;
 
-#define no_knowledge() ((Know){ 0 })
-
 #define DARK_COLOR   0
 #define GREEN_COLOR  1
 #define YELLOW_COLOR 2

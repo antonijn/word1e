@@ -279,7 +279,7 @@ static int
 color_prompt(WordColor colors)
 {
 	char fbbuf[6];
-	Know new = no_knowledge();
+	Know new = { 0 };
 	do {
 		if (feof(stdin))
 			return EOF;
@@ -527,7 +527,7 @@ main(int argc, char **argv)
 
 	Guesser guesser;
 	Oracle oracle;
-	Know k_init = no_knowledge();
+	Know k_init = { 0 };
 
 	switch (target_mode) {
 	case FIXED_TARGET:

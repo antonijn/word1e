@@ -300,7 +300,7 @@ load_index(FILE *f)
 bool
 has_no_knowledge(const Know *know)
 {
-	const Know k = no_knowledge();
+	const Know k = { 0 };
 	if (memcmp(know->exclude, k.exclude, sizeof(k.exclude)) != 0)
 		return false;
 
