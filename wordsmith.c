@@ -338,9 +338,9 @@ list(int argc, char **argv)
 
 	struct { char *s; int flag; } assoc[] = {
 		{ "all",      0           },
-		{ "targets",  WA_TARGET   },
+		{ "target",   WA_TARGET   },
 		{ "explicit", WA_EXPLICIT },
-		{ "slurs",    WA_SLUR     },
+		{ "slur",     WA_SLUR     },
 	};
 
 	for (int i = 0; i < sizeof(assoc) / sizeof(assoc[0]); ++i) {
