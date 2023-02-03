@@ -188,6 +188,24 @@ typedef struct {
 } BestTask;
 
 static void
+suggest(BestTaskOutput *out, int guess_idx, double guess_score)
+{
+	if (!suggest_slurs && (word_attrs[guess_idx].flags & WA_SLUR))
+		return;
+
+	if (guess_score > out->best_score) {
+		out->top[0] = all_words[guess_idx];
+		out->best_score = guess_score;
+		out->num_out = 1;
+	} else {
+		int j = out->num_out;
+		if (j < out->max_out)
+			out->top[j] = all_words[guess_idx];
+		++out->num_out;
+	}
+}
+
+static void
 best_guess_worker(void *info)
 {
 	BestTask *task = info;
@@ -203,16 +221,8 @@ best_guess_worker(void *info)
 		                                    best_local_score);
 
 		pthread_mutex_lock(&out->lock);
-		if (guess_score > out->best_score) {
-			memcpy(&out->top[0], &all_words[i], sizeof(Word));
-			out->best_score = guess_score;
-			out->num_out = 1;
-		} else if (guess_score == out->best_score) {
-			int j = out->num_out;
-			if (j < out->max_out)
-				memcpy(&out->top[j], &all_words[i], sizeof(Word));
-			++out->num_out;
-		}
+		if (guess_score >= out->best_score)
+			suggest(out, i, guess_score);
 
 		best_local_score = out->best_score;
 		pthread_mutex_unlock(&out->lock);

@@ -34,6 +34,7 @@ Word *all_words, *opts;
 Digraph *digraphs;
 WordAttr *word_attrs;
 int num_opts, num_words, verbosity = 0, num_digraphs;
+bool suggest_slurs = false;
 enum option_catalog opt_catalog = OC_NONE;
 
 int
@@ -251,18 +252,14 @@ load_index(FILE *f)
 
 	all_words  = malloc(sizeof(all_words[0])  * num_words);
 	word_attrs = malloc(sizeof(word_attrs[0]) * num_words);
-	opts       = malloc(sizeof(opts[0])       * num_words);
 
-	if (all_words == NULL || word_attrs == NULL || opts == NULL) {
+	if (all_words == NULL || word_attrs == NULL) {
 		fprintf(stderr, "out of memory\n");
 
 		free(all_words);
-		free(word_attrs);
-		free(opts);
 		return -1;
 	}
 
-	num_opts = 0;
 	double last_score = 1.0;
 	for (int i = 0; i < num_words; ++i) {
 		if (scan_word(f, &all_words[i]) < 0) {
@@ -288,16 +285,15 @@ load_index(FILE *f)
 			return -1;
 
 		word_attrs[i].flags = attr;
-
-		if (attr == WA_TARGET) {
-			memcpy(&opts[num_opts], &all_words[i], sizeof(Word));
-			++num_opts;
-		}
-
 		++line;
 	}
 
-	opt_catalog = OC_TARGET;
+	opt_catalog = OC_NONE;
+	opts = NULL;
+	num_opts = 0;
+	if (update_opts(NULL) < 0)
+		return -1;
+
 	return 0;
 }
 
@@ -334,10 +330,13 @@ word_matches(const Word *word, const Know *know)
 void
 filter_opts(const Know *know)
 {
+	if (know == NULL)
+		return;
+
 	int j = 0;
 	for (int i = 0; i < num_opts; ++i)
 		if (word_matches(&opts[i], know))
-			memmove(&opts[j++], &opts[i], sizeof(Word));
+			opts[j++] = opts[i];
 
 	num_opts = j;
 
@@ -346,29 +345,45 @@ filter_opts(const Know *know)
 		opts = new_opts;
 }
 
-int
-update_opts(const Know *know)
+static int
+load_opts(int mask, int filter)
 {
-	int prev_num_opts = num_opts;
-	filter_opts(know);
-	int elim = prev_num_opts - num_opts;
-
-	if (num_opts > 0 || opt_catalog != OC_TARGET)
-		return elim;
-
-	free(opts);
-
-	opts = malloc(sizeof(Word) * num_words);
+	opts = realloc(opts, sizeof(Word) * num_words);
 	if (opts == NULL) {
 		fprintf(stderr, "out of memory\n");
 		return -1;
 	}
 
-	memcpy(opts, all_words, sizeof(Word) * num_words);
-	num_opts = num_words;
+	num_opts = 0;
+	for (int i = 0; i < num_words; ++i)
+		if ((word_attrs[i].flags & mask) == filter)
+			opts[num_opts++] = all_words[i];
 
+	return 0;
+}
+
+int
+update_opts(const Know *know)
+{
+	int slur_mask = suggest_slurs ? 0 : WA_SLUR;
+	if (opt_catalog == OC_NONE) {
+		if (load_opts(WA_TARGET | slur_mask, WA_TARGET) < 0)
+			return -1;
+
+		opt_catalog = OC_TARGET;
+	}
+
+	int prev_num_opts = num_opts;
 	filter_opts(know);
-	opt_catalog = OC_ALL;
+	int elim = prev_num_opts - num_opts;
+
+	if (opt_catalog == OC_TARGET && num_opts == 0) {
+		if (load_opts(slur_mask, 0) < 0)
+			return -1;
+
+		opt_catalog = OC_ALL;
+		filter_opts(know);
+	}
 
 	return elim;
 }

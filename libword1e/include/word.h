@@ -48,6 +48,7 @@ extern Digraph *digraphs;
 extern WordAttr *word_attrs;
 extern int num_opts, num_words, verbosity, num_digraphs;
 extern enum option_catalog opt_catalog;
+extern bool suggest_slurs;
 
 int scan_word(FILE *f, Word *out);
 ssize_t load_words(FILE *f, Word **words_out);
