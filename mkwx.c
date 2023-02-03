@@ -24,10 +24,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 
 typedef struct {
 	Word *guess;
-	double score;
 	WordAttr attr;
 } InitialGuess;
 
@@ -37,16 +37,19 @@ typedef struct {
 	int from, until;
 } Range;
 
-static const char *word_list, *target_path;
-static char *out_path;
+static const char *word_list, *target_path, *slur_path, *out_path;
 static char *cmd;
+
+static Word *slurs;
+static int num_slurs;
 
 static int
 ig_compar(const void *lptr, const void *rptr)
 {
 	InitialGuess l = *(InitialGuess *)lptr;
 	InitialGuess r = *(InitialGuess *)rptr;
-	return (l.score < r.score) - (l.score > r.score);
+	return (l.attr.starting_score < r.attr.starting_score)
+	     - (l.attr.starting_score > r.attr.starting_score);
 }
 
 static int
@@ -63,9 +66,25 @@ w_compar(const void *lptr, const void *rptr)
 	return strcmp(lbuf, rbuf);
 }
 
+static int
+calc_attrs(const Word *word)
+{
+	int res = 0;
+
+	/* requires opts be alphabetically sorted (which it should be) */
+	if (bsearch(word, opts, num_opts, sizeof(Word), w_compar))
+		res |= WA_TARGET;
+	if (bsearch(word, slurs, num_slurs, sizeof(Word), w_compar))
+		res |= WA_SLUR;
+
+	return res;
+}
+
 static void
 build_index(void *info)
 {
+	static atomic_int progress = 0;
+
 	Range *r = info;
 	int from = r->from, until = r->until;
 
@@ -73,23 +92,18 @@ build_index(void *info)
 	for (int i = from; i < until; ++i) {
 		InitialGuess *ig = output + i;
 		ig->guess = &all_words[i];
-		ig->score = score_guess_st(&all_words[i], NULL, &k, 0.0);
+		ig->attr.starting_score = score_guess_st(&all_words[i], NULL, &k, 0.0);
 		if (verbosity > 0) {
-			int iscore = ig->score * 1000000.0;
+			int iscore = ig->attr.starting_score * 1000000.0;
 			print_word(stderr, ig->guess);
-			fprintf(stderr, " 0.%06d\n", iscore);
+
+			/* spaces are so simultaneous writes don't
+			 * leave permanent marks. */
+			fprintf(stderr, " 0.%06d [%5d / %5d]        \r", iscore, ++progress, num_words);
 		}
+
+		ig->attr.flags = calc_attrs(ig->guess);
 	}
-}
-
-static int
-calc_attrs(const Word *word, Word *sorted_opts)
-{
-	int res = 0;
-	if (bsearch(word, sorted_opts, num_opts, sizeof(Word), w_compar))
-		res |= WA_TARGET;
-
-	return res;
 }
 
 static void
@@ -115,18 +129,6 @@ compile_index(void)
 	qsort(output, num_words, sizeof(InitialGuess), ig_compar);
 	fprintf(stderr, " done!\n");
 
-	fprintf(stderr, "sorting target list...");
-	Word *sorted_opts = malloc(num_opts * sizeof(Word));
-	if (sorted_opts == NULL) {
-		fprintf(stderr, "out of memory!\n");
-		exit(1);
-	}
-
-	memcpy(sorted_opts, opts, num_opts * sizeof(Word));
-	qsort(sorted_opts, num_opts, sizeof(Word), w_compar);
-
-	fprintf(stderr, " done!\n");
-
 	fprintf(stderr, "writing output...");
 	FILE *fout = stdout;
 	if (out_path) {
@@ -142,20 +144,15 @@ compile_index(void)
 		fprintf(fout, "#DIGRAPH %c%c\n", digraphs[i].fst, digraphs[i].snd);
 
 	for (int i = 0; i < num_words; ++i) {
-		int iscore = output[i].score * 1000000.0;
+		int iscore = output[i].attr.starting_score * 1000000.0;
 		print_word(fout, output[i].guess);
-		fprintf(fout, " %06d", iscore);
-
-		int attr = calc_attrs(output[i].guess, sorted_opts);
-		print_attrs(fout, attr);
-
+		fprintf(fout, " 0.%06d", iscore);
+		print_attrs(fout, output[i].attr.flags);
 		fputc('\n', fout);
 	}
 
 	if (out_path)
 		fclose(fout);
-
-	free(sorted_opts);
 
 	fprintf(stderr, " done!\n");
 }
@@ -169,7 +166,25 @@ print_usage(void)
 	       "  -o PATH               Output index.\n"
 	       "  -v                    Verbose output.\n"
 	       "  --target PATH         Path to file of possible target words.\n"
+	       "  --slur PATH           Path to file of slurs.\n"
 	       "  --help                Show this message.\n\n", cmd);
+}
+
+static int
+handle_path_option(int *arg_idx,
+                   int argc,
+                   char **argv,
+                   const char *opt_name,
+                   const char **target)
+{
+	if (argc <= *arg_idx + 1) {
+		fprintf(stderr, "expected argument after %s\n", opt_name);
+		print_usage();
+		return -1;
+	}
+
+	*target = argv[++*arg_idx];
+	return 0;
 }
 
 static int
@@ -180,16 +195,11 @@ handle_string_option(const char *arg, int *arg_idx, int argc, char **argv)
 		exit(0);
 	}
 
-	if (0 == strcmp(arg, "--target")) {
-		if (argc <= *arg_idx + 1) {
-			fprintf(stderr, "expected argument after --target\n");
-			print_usage();
-			return -1;
-		}
+	if (0 == strcmp(arg, "--target"))
+		return handle_path_option(arg_idx, argc, argv, "--target", &target_path);
 
-		target_path = argv[++*arg_idx];
-		return 0;
-	}
+	if (0 == strcmp(arg, "--slur"))
+		return handle_path_option(arg_idx, argc, argv, "--slur", &slur_path);
 
 	fprintf(stderr, "unknown option `%s'\n", arg);
 	return -1;
@@ -202,14 +212,7 @@ handle_option(char opt, int *arg_idx, int argc, char **argv)
 		++verbosity;
 		break;
 	case 'o':
-		if (argc <= *arg_idx + 1) {
-			fprintf(stderr, "expected argument after -o\n");
-			print_usage();
-			return -1;
-		}
-
-		out_path = argv[++*arg_idx];
-		break;
+		return handle_path_option(arg_idx, argc, argv, "-o", &out_path);
 	default:
 		fprintf(stderr, "unknown option '%c'\n", opt);
 		print_usage();
@@ -257,9 +260,9 @@ read_word_list(void)
 {
 	FILE *f = stdin;
 	if (word_list) {
-		f = fopen(word_list, "r");
+		f = fopen(word_list, "rb");
 		if (!f) {
-			perror(cmd);
+			perror(word_list);
 			exit(1);
 		}
 	}
@@ -276,29 +279,38 @@ read_word_list(void)
 }
 
 static void
-read_target_list(void)
+read_special_list(Word **list, int *count, Word *fb, int num_fb, const char *path)
 {
-	if (target_path == NULL) {
-		/* we can do this, since filter_opts() is never called */
-		opts = all_words;
-		num_opts = num_words;
+	if (path == NULL & num_fb <= 0)
 		return;
+
+	if (path != NULL) {
+		FILE *f = fopen(path, "rb");
+		if (!f) {
+			perror(path);
+			exit(1);
+		}
+
+		ssize_t snum_words = load_words(f, list);
+
+		fclose(f);
+
+		if (snum_words < 0)
+			exit(1);
+
+		*count = snum_words;
+	} else {
+		*list = malloc(sizeof(Word) * num_fb);
+		if (*list == NULL) {
+			fprintf(stderr, "out of memory\n");
+			exit(1);
+		}
+
+		*count = num_fb;
+		memcpy(*list, fb, sizeof(Word) * num_fb);
 	}
 
-	FILE *f = fopen(target_path, "r");
-	if (!f) {
-		perror(cmd);
-		exit(1);
-	}
-
-	ssize_t snum_words = load_words(f, &opts);
-
-	fclose(f);
-
-	if (snum_words < 0)
-		exit(1);
-
-	num_opts = snum_words;
+	qsort(*list, *count, sizeof(Word), w_compar);
 }
 
 int
@@ -308,7 +320,10 @@ main(int argc, char **argv)
 		exit(1);
 
 	read_word_list();
-	read_target_list();
+
+	/* opts will be alphabetically sorted */
+	read_special_list(&opts, &num_opts, all_words, num_words, target_path);
+	read_special_list(&slurs, &num_slurs, NULL, 0, slur_path);
 
 	Range ranges[8];
 	int last_word = 0;
@@ -332,6 +347,12 @@ main(int argc, char **argv)
 		threadpool_add(pool, build_index, &ranges[i], 0);
 
 	threadpool_destroy(pool, THREADPOOL_GRACEFUL);
-	fprintf(stderr, "tasks done!\n");
-	return compile_index(), 0;
+	fprintf(stderr, "\ntasks done!\n");
+
+	compile_index();
+
+	free(all_words);
+	free(opts);
+	free(slurs);
+	return 0;
 }
